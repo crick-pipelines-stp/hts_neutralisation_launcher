@@ -4,7 +4,7 @@ import sqlite3
 import time
 
 from watchdog.events import LoggingEventHandler
-from watchdog.observers import Observer
+from watchdog.observers.polling import PollingObserver as Observer
 
 import task
 
@@ -122,13 +122,13 @@ if __name__ == "__main__":
                         format='%(asctime)s %(levelname)s - %(message)s',
                         datefmt='%Y-%m-%d %H:%M:%S')
 
-    path = "/usr/src/app/testdir"
-    db_path = "/usr/src/app/processed_experiments.sqlite"
+    input_dir = "/camp/hts/working/scott/test_input"
+    db_path = "processed_experiments.sqlite"
 
-    event_handler = MyEventHandler(path, db_path)
+    event_handler = MyEventHandler(input_dir, db_path)
 
     observer = Observer()
-    observer.schedule(event_handler, path, recursive=False)
+    observer.schedule(event_handler, input_dir, recursive=False)
     observer.start()
 
     try:
