@@ -1,6 +1,7 @@
 import os
 import logging
 import sqlite3
+import sys
 import time
 
 from watchdog.events import LoggingEventHandler
@@ -118,11 +119,20 @@ class MyEventHandler(LoggingEventHandler):
 
 if __name__ == "__main__":
 
-    logging.basicConfig(level=logging.INFO,
-                        format='%(asctime)s %(levelname)s - %(message)s',
-                        datefmt='%Y-%m-%d %H:%M:%S')
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S',
+        handlers=[
+            logging.FileHandler(
+                "/camp/hts/working/scott/neutralisation_watchdog.log",
+                mode="a"
+            ),
+            logging.StreamHandler(sys.stdout)
+        ]
+    )
 
-    input_dir = "/camp/hts/working/scott/test_input"
+    input_dir = "/camp/hts/working/Neutralisation Assay/Neutralisation assay - raw data/"
     db_path = "processed_experiments.sqlite"
 
     event_handler = MyEventHandler(input_dir, db_path)
