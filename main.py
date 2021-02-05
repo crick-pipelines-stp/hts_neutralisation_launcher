@@ -11,7 +11,6 @@ import task
 
 
 class MyEventHandler(LoggingEventHandler):
-
     def __init__(self, input_dir, db_path, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.input_dir = input_dir
@@ -35,18 +34,28 @@ class MyEventHandler(LoggingEventHandler):
         else:
             logging.info(f"new experiment: {experiment}")
             logging.info("creating plate_list")
-            plate_list = self.create_plate_list(experiment)
-            if len(plate_list) == 8:
+            plate_list_96 = self.create_plate_list_96(experiment)
+            plate_list_384 = self.create_plate_list_384(experiment)
+            if len(plate_list_96) == 8:
                 logging.info("launching analysis job")
-                task.background_analysis.delay(plate_list)
+                task.background_analysis_96.delay(plate_list_96)
                 logging.info("analysis complete, adding to processed database")
                 self.add_experiment_to_db(experiment)
             else:
-                logging.error(
-                    f"plate list length = {len(plate_list)} expected 8"
+                logging.warning(
+                    f"plate list 96 length = {len(plate_list_96)} expected 8"
+                )
+            if len(plate_list_384) == 2:
+                logging.info("launching analysis job")
+                task.background_analysis_384.delay(plate_list_384)
+                logging.info("analysis complete, adding to processed database")
+                self.add_experiment_to_db(experiment)
+            else:
+                logging.warning(
+                    f"plate list 384 length = {len(plate_list_384)} expected 2"
                 )
 
-    def create_plate_list(self, experiment):
+    def create_plate_list_96(self, experiment):
         """
         create a plate list from an experiment name
         """
@@ -56,7 +65,27 @@ class MyEventHandler(LoggingEventHandler):
         wanted_experiment = []
         for i in full_paths:
             final_path = i.split(os.sep)[-1]
-            if final_path[3:9] == experiment:
+            # 96-well plates have the prefix "A11000000"
+            if (
+                final_path[3:9] == experiment
+                and final_path[0] == "A"
+                and final_path[1] in (1, 2, 3, 4)
+            ):
+                wanted_experiment.append(i)
+        return wanted_experiment
+
+    def create_plate_list_384(self, experiment):
+        """
+        create a plate list from an experiment name
+        """
+        all_subdirs = [i for i in os.listdir(self.input_dir)]
+        full_paths = [os.path.join(self.input_dir, i) for i in all_subdirs]
+        # filter to just those of the specific experiment
+        wanted_experiment = []
+        for i in full_paths:
+            final_path = i.split(os.sep)[-1]
+            # 384-well plates have the prefix "AA000000"
+            if final_path[3:9] == experiment and final_path[:2] == "AA":
                 wanted_experiment.append(i)
         return wanted_experiment
 
@@ -68,9 +97,7 @@ class MyEventHandler(LoggingEventHandler):
         if plate_dir.startswith("A"):
             return plate_dir.split("__")[0][-6:]
         else:
-            logging.error(
-                f"invalid plate directory name {plate_dir}, skipping"
-            )
+            logging.error(f"invalid plate directory name {plate_dir}, skipping")
 
     def experiment_exists(self, experiment):
         """
@@ -80,7 +107,7 @@ class MyEventHandler(LoggingEventHandler):
         cursor = conn.cursor()
         cursor.execute(
             "SELECT EXISTS (SELECT 1 FROM processed WHERE experiment=(?))",
-            (experiment, )
+            (experiment,),
         )
         exists = cursor.fetchone()[0]
         cursor.close()
@@ -90,10 +117,7 @@ class MyEventHandler(LoggingEventHandler):
         """add an experiment to the processed database"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO processed (experiment) VALUES (?);",
-            (experiment, )
-        )
+        cursor.execute("INSERT INTO processed (experiment) VALUES (?);", (experiment,))
         conn.commit()
         cursor.close()
 
@@ -133,6 +157,7 @@ if __name__ == "__main__":
     )
 
     input_dir = "/camp/hts/working/Neutralisation Assay/Neutralisation assay - raw data/"
+    
     db_path = "processed_experiments.sqlite"
 
     event_handler = MyEventHandler(input_dir, db_path)
@@ -148,5 +173,3 @@ if __name__ == "__main__":
         observer.stop()
 
     observer.join()
-
-

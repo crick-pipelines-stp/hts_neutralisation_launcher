@@ -1,15 +1,16 @@
 # Neutralisation analysis launcher
 
+
 Launches plaque neutralisation analyses when new data is added to a directory.
 
 Uses watchdog to monitor for filesystem changes, redis and celery to create an
 analysis job-queue.
 
-
-This requires an installation of redis-server, celery and a MySQL driver.
-
+![diagramme](diagramme.png)
 
 ## Requirements
+This requires an installation of redis-server, celery and a MySQL driver.
+
 - Redis 6.0.10
 - Celery 4.4.7
 - Celery flower (optional)
