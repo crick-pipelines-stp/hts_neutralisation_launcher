@@ -84,8 +84,8 @@ class MyEventHandler(LoggingEventHandler):
         wanted_experiment = []
         for i in full_paths:
             final_path = i.split(os.sep)[-1]
-            # 384-well plates have the prefix "AA000000"
-            if final_path[2:9] == experiment and final_path[0] == "S":
+            # 384-well plates have the prefix "S01000000"
+            if final_path[3:9] == experiment and final_path[0] == "S":
                 wanted_experiment.append(i)
         return wanted_experiment
 
@@ -97,7 +97,8 @@ class MyEventHandler(LoggingEventHandler):
         if plate_dir.startswith("A"):
             experiment_name = plate_dir.split("__")[0][-6:]
         elif plate_dir.startswith("S"):
-            experiment_name = plate_dir.split("__")[0][-7:]
+            # 384-well plates should be the same for now
+            experiment_name = plate_dir.split("__")[0][-6:]
         else:
             logging.error(f"invalid plate directory name {plate_dir}, skipping")
         return experiment_name
@@ -160,7 +161,7 @@ if __name__ == "__main__":
     )
 
     input_dir = "/camp/hts/working/Neutralisation Assay/Neutralisation assay - raw data/"
-    
+
     db_path = "processed_experiments.sqlite"
 
     event_handler = MyEventHandler(input_dir, db_path)
