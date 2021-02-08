@@ -85,7 +85,7 @@ class MyEventHandler(LoggingEventHandler):
         for i in full_paths:
             final_path = i.split(os.sep)[-1]
             # 384-well plates have the prefix "AA000000"
-            if final_path[3:9] == experiment and final_path[:2] == "AA":
+            if final_path[2:9] == experiment and final_path[0] == "S":
                 wanted_experiment.append(i)
         return wanted_experiment
 
@@ -95,9 +95,12 @@ class MyEventHandler(LoggingEventHandler):
         """
         plate_dir = dir_name.split(os.sep)[-1]
         if plate_dir.startswith("A"):
-            return plate_dir.split("__")[0][-6:]
+            experiment_name = plate_dir.split("__")[0][-6:]
+        elif plate_dir.startswith("S"):
+            experiment_name = plate_dir.split("__")[0][-7:]
         else:
             logging.error(f"invalid plate directory name {plate_dir}, skipping")
+        return experiment_name
 
     def experiment_exists(self, experiment):
         """
