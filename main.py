@@ -27,6 +27,7 @@ class MyEventHandler(LoggingEventHandler):
         if experiment is None:
             # invalid experiment name, skip
             return None
+        #### concentration-response analysis ###
         if self.experiment_exists(experiment):
             logging.info(
                 f"experiment {experiment} already exists in processed database"
@@ -54,6 +55,22 @@ class MyEventHandler(LoggingEventHandler):
                 logging.warning(
                     f"plate list 384 length = {len(plate_list_384)} expected 2"
                 )
+        #### image stitching ####
+        if self.is_384_plate(src_path, experiment):
+            logging.info("determined 384 plate, stitching images")
+            indexfile_path = os.path.join(src_path, "indexfile.txt")
+            task.background_image_stitch_384.delay(indexfile_path)
+        else:
+            logging.info("not a 384 plate")
+
+    def is_384_plate(self, dir_name, experiment):
+        """determine if it's a 384-well plate"""
+        final_path = os.path.basename(dir_name)
+        parsed_experiment = final_path.split("__")[0][-6:]
+        if final_path.startswith("S") and parsed_experiment == experiment:
+            return True
+        else:
+            return False
 
     def create_plate_list_96(self, experiment):
         """
@@ -64,7 +81,7 @@ class MyEventHandler(LoggingEventHandler):
         # filter to just those of the specific experiment
         wanted_experiment = []
         for i in full_paths:
-            final_path = i.split(os.sep)[-1]
+            final_path = os.path.basename(i)
             # 96-well plates have the prefix "A11000000"
             if (
                 final_path[3:9] == experiment
@@ -83,7 +100,7 @@ class MyEventHandler(LoggingEventHandler):
         # filter to just those of the specific experiment
         wanted_experiment = []
         for i in full_paths:
-            final_path = i.split(os.sep)[-1]
+            final_path = os.path.basename(i)
             # 384-well plates have the prefix "S01000000"
             if final_path[3:9] == experiment and final_path[0] == "S":
                 wanted_experiment.append(i)
@@ -93,7 +110,7 @@ class MyEventHandler(LoggingEventHandler):
         """
         get the name of the experiment from a plate directory
         """
-        plate_dir = dir_name.split(os.sep)[-1]
+        plate_dir = os.path.basename(dir_name)
         if plate_dir.startswith("A"):
             experiment_name = plate_dir.split("__")[0][-6:]
         elif plate_dir.startswith("S"):
@@ -101,6 +118,7 @@ class MyEventHandler(LoggingEventHandler):
             experiment_name = plate_dir.split("__")[0][-6:]
         else:
             logging.error(f"invalid plate directory name {plate_dir}, skipping")
+            experiment_name = None
         return experiment_name
 
     def experiment_exists(self, experiment):
@@ -160,7 +178,7 @@ if __name__ == "__main__":
         ]
     )
 
-    input_dir = "/camp/hts/working/Neutralisation Assay/Neutralisation assay - raw data/"
+    input_dir = "/camp/hts/working/Neutralisation Assay/384_raw_data"
 
     db_path = "processed_experiments.sqlite"
 
