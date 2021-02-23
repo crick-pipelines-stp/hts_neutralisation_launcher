@@ -26,7 +26,7 @@ redis-server
 
 2. Start celery in the working directory  
 ```
-celery -A task worker -Q analysis --concurrency=1 --log-level=info -E
+celery -A task worker -Q analysis,image_stitch --concurrency=4 --log-level=info -E
 ```
 
 3. Start watchdog to monitor filesystem  
