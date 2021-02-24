@@ -37,7 +37,7 @@ python main.py
 
 (optional) flower to monitor celery jobs  
 ```
-celery flower -A task --address=0.0.0.0 --port=5555
+celery flower -A task --address=0.0.0.0 --port=5555 --basic_auth={username}:{password}
 ```
 
 
