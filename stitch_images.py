@@ -45,7 +45,6 @@ class ImageStitcher:
             else:
                 raise RuntimeError("unrecognised channel")
             img_plate[img_plate > 1.0] = 1.0
-            print(img_plate)
             img_plate = skimage.img_as_float(img_plate)
             img_montage = skimage.util.montage(
                 img_plate,
@@ -97,7 +96,7 @@ class ImageStitcher:
             arr_in=img_stack,
             fill=1.0,  # white if rescale_intensity is True
             grid_shape=(2, 4),
-            rescale_intensity=False,  # rescales each image seperately between 0 and 1
+            rescale_intensity=False,
             padding_width=10,
             multichannel=False,
         )
