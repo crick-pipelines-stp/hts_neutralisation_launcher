@@ -20,6 +20,8 @@ class ImageStitcher:
         self.well_dict = json.load(open("well_dict.json"))
         self.plate_images = None
         self.dilution_images = None
+        self.ch1_max = 2000 # just a guess
+        self.ch2_max = 2000 # just a guess
 
     def stitch_plate(self, well_size=(80, 80)):
         """docstring"""
@@ -29,16 +31,28 @@ class ImageStitcher:
             for index, row in group.iterrows():
                 img = skimage.io.imread(row["URL"])
                 # TODO add logging
-                img = skimage.transform.resize(img, well_size, anti_aliasing=True)
+                img = skimage.transform.resize(
+                    img, well_size, anti_aliasing=True, preserve_range=True
+                )
                 ch_images[channel_name].append(img)
             img_stack = np.stack(ch_images[channel_name])
             img_plate = img_stack.reshape(384, *well_size)
+            # rescale
+            if channel_name == 1:
+                img_plate = img_plate / self.ch1_max
+            elif channel_name == 2:
+                img_plate = img_plate / self.ch2_max
+            else:
+                raise RuntimeError("unrecognised channel")
+            img_plate[img_plate > 1.0] = 1.0
+            print(img_plate)
+            img_plate = skimage.img_as_float(img_plate)
             img_montage = skimage.util.montage(
                 img_plate,
                 fill=0,
                 padding_width=3,
                 grid_shape=(16, 24),
-                rescale_intensity=True,
+                rescale_intensity=False,
             )
             # TODO rescale to some constant value
             plate_images[channel_name] = img_montage
@@ -67,15 +81,23 @@ class ImageStitcher:
         for channel in [1, 2]:
             for dilution in [40, 160, 640, 2560]:
                 img = sample_dict[channel][dilution]
-                img = skimage.transform.resize(img, img_size, anti_aliasing=True)
+                img = skimage.transform.resize(
+                    img, img_size, anti_aliasing=True, preserve_range=True
+                )
+                # rescale image intensities
+                if channel == 1:
+                    img = img / self.ch1_max
+                if channel == 2:
+                    img = img / self.ch2_max
+                img[img > 1.0] = 1
+                img = skimage.img_as_float(img)
                 images.append(img)
         img_stack = np.stack(images).reshape(8, *img_size)
-        # TODO rescale by some constant
         img_montage = skimage.util.montage(
             arr_in=img_stack,
             fill=1.0,  # white if rescale_intensity is True
             grid_shape=(2, 4),
-            rescale_intensity=True,  # rescales each image seperately between 0 and 1
+            rescale_intensity=False,  # rescales each image seperately between 0 and 1
             padding_width=10,
             multichannel=False,
         )
