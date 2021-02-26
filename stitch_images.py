@@ -23,8 +23,8 @@ class ImageStitcher:
         self.well_dict = json.load(open("well_dict.json"))
         self.plate_images = None
         self.dilution_images = None
-        self.ch1_max = 2000  # just a guess
-        self.ch2_max = 2000  # just a guess
+        self.ch1_max = 1500  # just a guess
+        self.ch2_max = 1500  # just a guess
 
     def stitch_plate(self, well_size=(80, 80)):
         """docstring"""
