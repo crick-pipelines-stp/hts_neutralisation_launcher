@@ -13,15 +13,18 @@ import utils
 
 class ImageStitcher:
     """docstring"""
-    def __init__(self, indexfile_path, output_dir="/camp/ABNEUTRALISATION/stitched_images"):
+
+    def __init__(
+        self, indexfile_path, output_dir="/camp/ABNEUTRALISATION/stitched_images"
+    ):
         self.indexfile_path = indexfile_path
         self.indexfile = pd.read_csv(indexfile_path, sep="\t")
         self.output_dir = output_dir
         self.well_dict = json.load(open("well_dict.json"))
         self.plate_images = None
         self.dilution_images = None
-        self.ch1_max = 2000 # just a guess
-        self.ch2_max = 2000 # just a guess
+        self.ch1_max = 2000  # just a guess
+        self.ch2_max = 2000  # just a guess
 
     def stitch_plate(self, well_size=(80, 80)):
         """docstring"""
@@ -48,7 +51,7 @@ class ImageStitcher:
             img_plate = skimage.img_as_float(img_plate)
             img_montage = skimage.util.montage(
                 img_plate,
-                fill=0,
+                fill=1.0,
                 padding_width=3,
                 grid_shape=(16, 24),
                 rescale_intensity=False,
@@ -114,19 +117,12 @@ class ImageStitcher:
     def save_all(self):
         output_dir_path = self.create_output_dir()
         if self.dilution_images is None:
-            raise RuntimeError(
-                "no dilution images, have you run stitch_all_samples()?"
-            )
+            raise RuntimeError("no dilution images, have you run stitch_all_samples()?")
         if self.plate_images is None:
-            raise RuntimeError(
-                "no plate images, have you run stitch_plate()?"
-            )
+            raise RuntimeError("no plate images, have you run stitch_plate()?")
         # TODO: add logging
         for channel_num, plate_arr in self.plate_images.items():
-            plate_path = os.path.join(
-                self.output_dir_path,
-                f"plate_{channel_num}.png"
-            )
+            plate_path = os.path.join(self.output_dir_path, f"plate_{channel_num}.png")
             plate_arr = skimage.img_as_ubyte(plate_arr)
             skimage.io.imsave(fname=plate_path, arr=plate_arr)
         for well_name, well_arr in self.dilution_images.items():
@@ -134,7 +130,6 @@ class ImageStitcher:
             # TODO: add logging
             well_arr = skimage.img_as_ubyte(well_arr)
             skimage.io.imsave(fname=well_path, arr=well_arr)
-
 
     def create_output_dir(self):
         """docstring"""
