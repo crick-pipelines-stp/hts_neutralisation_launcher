@@ -57,11 +57,17 @@ class MyEventHandler(LoggingEventHandler):
                 )
         #### image stitching ####
         if self.is_384_plate(src_path, experiment):
+            plate_name = self.get_plate_name(src_path)
             logging.info("determined 384 plate, stitching images")
-            indexfile_path = os.path.join(src_path, "indexfile.txt")
-            task.background_image_stitch_384.delay(indexfile_path)
+            if self.already_stitched(plate_name):
+                logging.info(f"plate {plate_name} already stitched")
+            else:
+                logging.info("new plate {plate}, stitching images")
+                indexfile_path = os.path.join(src_path, "indexfile.txt")
+                task.background_image_stitch_384.delay(indexfile_path)
+                self.add_plate_to_stitch_db(plate_name)
         else:
-            logging.info("not a 384 plate")
+            logging.info("not a 384 plate, skipping stitching")
 
     def is_384_plate(self, dir_name, experiment):
         """determine if it's a 384-well plate"""
@@ -107,9 +113,7 @@ class MyEventHandler(LoggingEventHandler):
         return wanted_experiment
 
     def get_experiment_name(self, dir_name):
-        """
-        get the name of the experiment from a plate directory
-        """
+        """get the name of the experiment from a plate directory"""
         plate_dir = os.path.basename(dir_name)
         if plate_dir.startswith("A"):
             experiment_name = plate_dir.split("__")[0][-6:]
@@ -120,6 +124,11 @@ class MyEventHandler(LoggingEventHandler):
             logging.error(f"invalid plate directory name {plate_dir}, skipping")
             experiment_name = None
         return experiment_name
+
+    def get_plate_name(self, dir_name):
+        """get the name of the plate from the full directory path"""
+        plate_dir = os.path.basename(dir_name)
+        return plate_dir.split("__")[0]
 
     def experiment_exists(self, experiment):
         """
@@ -143,6 +152,25 @@ class MyEventHandler(LoggingEventHandler):
         conn.commit()
         cursor.close()
 
+    def add_plate_to_stitch_db(self, plate_name):
+        """add plate to the stitched database"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO stitched (plate_name) VALUES (?);", (plate_name,))
+        conn.commit()
+        cursor.close()
+
+    def already_stitched(self, plate_name):
+        """check is a plate has already been stitched"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT EXISTS (SELECT 1 FROM stitched WHERE plate_name=(?))", (plate_name,)
+        )
+        exists = cursor.fetchone()[0]
+        cursor.close()
+        return exists
+
     def create_db(self):
         """
         create processed experiments database if it doesn't
@@ -157,6 +185,11 @@ class MyEventHandler(LoggingEventHandler):
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 experiment CHAR(10) NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS stitched
+            (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                plate_name CHAR(20) NOT NULL
+            );
             """
         )
         conn.commit()
@@ -167,15 +200,14 @@ if __name__ == "__main__":
 
     logging.basicConfig(
         level=logging.INFO,
-        format='%(asctime)s %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S',
+        format="%(asctime)s %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
         handlers=[
             logging.FileHandler(
-                "/camp/hts/working/scott/neutralisation_watchdog.log",
-                mode="a"
+                "/camp/hts/working/scott/neutralisation_watchdog.log", mode="a"
             ),
-            logging.StreamHandler(sys.stdout)
-        ]
+            logging.StreamHandler(sys.stdout),
+        ],
     )
 
     input_dir = "/camp/hts/working/Neutralisation Assay/384_raw_data"
