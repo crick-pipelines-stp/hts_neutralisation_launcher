@@ -7,9 +7,7 @@ import stitch_images
 
 
 celery = Celery(
-    "task",
-    backend="redis://localhost:6379/0",
-    broker="redis://localhost:6379/0"
+    "task", backend="redis://localhost:6379/0", broker="redis://localhost:6379/0"
 )
 
 
