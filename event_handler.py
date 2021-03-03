@@ -59,7 +59,7 @@ class MyEventHandler(LoggingEventHandler):
             if self.already_stitched(plate_name):
                 logging.info(f"plate {plate_name} already stitched")
             else:
-                logging.info(f"new plate {plate}, stitching images")
+                logging.info(f"new plate {plate_name}, stitching images")
                 indexfile_path = os.path.join(src_path, "indexfile.txt")
                 task.background_image_stitch_384.delay(indexfile_path)
                 self.add_plate_to_stitch_db(plate_name)
