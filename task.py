@@ -27,7 +27,7 @@ def background_analysis_384(plate_list):
 
 
 @celery.task(
-    queue="image_stitch", autorety_for=(ConnectionResetError, URLError)
+    queue="image_stitch", autoretry_for=(ConnectionResetError, URLError)
 )
 def background_image_stitch_384(indexfile_path):
     """image stitching for 384 well plate"""
