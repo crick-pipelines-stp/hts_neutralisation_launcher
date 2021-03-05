@@ -40,7 +40,7 @@ class ImageStitcher:
         # hopefully not get blacklisted from whoever is hosting this
         placeholder_url = "https://apothekergroup.com/wp-content/uploads/2018/09/placeholder.png"
         # create a dataframe with complete "Row", "Column", "Channel ID" column values
-        rows, cols in zip(*itertools.product(range(1, 17), range(1, 25)))
+        rows, cols = zip(*itertools.product(range(1, 17), range(1, 25)))
         temp_df_1 = pd.DataFrame({"Row": rows, "Column": cols, "Channel ID": 1})
         temp_df_2 = pd.DataFrame({"Row": rows, "Column": cols, "Channel ID": 2})
         temp_df = pd.concat([temp_df_1, temp_df_2]).sort_values(["Row", "Column", "Channel ID"])
