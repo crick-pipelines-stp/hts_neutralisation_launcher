@@ -9,6 +9,7 @@ import skimage.transform
 import skimage.io
 
 import utils
+from well_dict import well_dict as WELL_DICT
 
 
 class ImageStitcher:
@@ -19,12 +20,36 @@ class ImageStitcher:
     ):
         self.indexfile_path = indexfile_path
         self.indexfile = pd.read_csv(indexfile_path, sep="\t")
+        self.indexfile = self.fix_missing_wells(self.indexfile)
         self.output_dir = output_dir
-        self.well_dict = json.load(open("well_dict.json"))
+        self.well_dict = WELL_DICT
         self.plate_images = None
         self.dilution_images = None
         self.ch1_max = 1500  # just a guess
         self.ch2_max = 1500  # just a guess
+
+    def fix_missing_wells(self, indexfile):
+        """
+        find missing wells in the indexfile and add
+        them in with the URL pointing to a placeholder
+        """
+        n_expected_rows = 768  # 384 wells * 2 channels
+        if indexfile.shape[0] == n_expected_rows:
+            # no missing wells, just return the indexfile as it is
+            return indexfile
+        # hopefully not get blacklisted from whoever is hosting this
+        placeholder_url = "https://apothekergroup.com/wp-content/uploads/2018/09/placeholder.png"
+        # create a dataframe with complete "Row", "Column", "Channel ID" column values
+        rows, cols in zip(*itertools.product(range(1, 17), range(1, 25)))
+        temp_df_1 = pd.DataFrame({"Row": rows, "Column": cols, "Channel ID": 1})
+        temp_df_2 = pd.DataFrame({"Row": rows, "Column": cols, "Channel ID": 2})
+        temp_df = pd.concat([temp_df_1, temp_df_2]).sort_values(["Row", "Column", "Channel ID"])
+        merged = indexfile.merge(temp_df, how="outer")
+        assert merged.shape[0] == 768
+        # replace missing URLs with the placeholder URL
+        merged["URL"] = merged["URL"].fillna(placeholder_url)
+        merged = merged.sort_values(["Row", "Column", "Channel ID"])
+        return merged
 
     def stitch_plate(self, well_size=(80, 80)):
         """docstring"""
