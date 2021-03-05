@@ -25,8 +25,8 @@ class ImageStitcher:
         self.well_dict = WELL_DICT
         self.plate_images = None
         self.dilution_images = None
-        self.ch1_max = 1500  # just a guess
-        self.ch2_max = 1500  # just a guess
+        self.ch1_max = 1200  # DAPI
+        self.ch2_max = 1500  # virus
 
     def fix_missing_wells(self, indexfile):
         """
