@@ -1,5 +1,8 @@
 import logging
 import os
+import math
+import string
+from collections import defaultdict
 
 from watchdog.events import LoggingEventHandler
 
@@ -14,6 +17,9 @@ class MyEventHandler(LoggingEventHandler):
         self.db_path = db_path
         self.database = Database(db_path)
         self.database.create()
+        variant_map = self.create_variant_mapping()
+        self.variant_mapping = variant_map
+        self.variant_mapping_rev = self.reverse_variant_mapping(variant_map)
 
     def on_created(self, event):
         """
@@ -25,45 +31,44 @@ class MyEventHandler(LoggingEventHandler):
         if experiment is None:
             # invalid experiment name, skip
             return None
+        plate_name = self.get_plate_name(src_path)
+        variant_letter = self.get_variant_letter(plate_name)
         #### concentration-response analysis ###
-        if self.database.is_processed_experiment(experiment):
+        if self.database.is_experiment_processed(experiment, variant_letter):
             logging.info(
-                f"experiment {experiment} already exists in processed database"
+                f"experiment: {experiment} variant: {variant_letter} has already been analysed"
             )
         else:
-            logging.info(f"new experiment: {experiment}")
-            logging.info("creating plate_list")
+            logging.info(f"new experiment: {experiment} variant: {variant_letter}")
             plate_list_96 = self.create_plate_list_96(experiment)
-            plate_list_384 = self.create_plate_list_384(experiment)
+            plate_list_384 = self.create_plate_list_384(experiment, variant_letter)
             if len(plate_list_96) == 8:
-                logging.info("launching analysis job")
                 task.background_analysis_96.delay(plate_list_96)
-                logging.info("analysis complete, adding to processed database")
-                self.database.add_processed_experiment(experiment)
+                logging.info("analysis launched, adding to processed database")
+                self.database.add_processed_experiment(experiment, variant_letter)
             else:
                 logging.warning(
                     f"plate list 96 length = {len(plate_list_96)} expected 8"
                 )
             if len(plate_list_384) == 2:
-                logging.info("launching analysis job")
                 task.background_analysis_384.delay(plate_list_384)
-                logging.info("analysis complete, adding to processed database")
-                self.database.add_processed_experiment(experiment)
+                logging.info("analysis launched, adding to processed database")
+                self.database.add_processed_experiment(experiment, variant_letter)
             else:
                 logging.warning(
                     f"plate list 384 length = {len(plate_list_384)} expected 2"
                 )
         #### image stitching ####
         if self.is_384_plate(src_path, experiment):
-            plate_name = self.get_plate_name(src_path)
-            logging.info("determined 384 plate, stitching images")
-            if self.database.is_stitched_plate(plate_name):
-                logging.info(f"plate {plate_name} already stitched")
+            logging.info("determined it's a 384 plate, stitching images")
+            if self.database.is_plate_stitched(plate_name):
+                logging.info(f"plate {plate_name} has already been stitched")
             else:
-                logging.info(f"new plate {plate_name}, stitching images")
+                logging.info(f"new plate {plate_name}")
                 indexfile_path = os.path.join(src_path, "indexfile.txt")
                 task.background_image_stitch_384.delay(indexfile_path)
                 self.database.add_stitched_plate(plate_name)
+                logging.info("stitching launched, adding to stitched database")
         else:
             logging.info("not a 384 plate, skipping stitching")
 
@@ -78,7 +83,7 @@ class MyEventHandler(LoggingEventHandler):
 
     def create_plate_list_96(self, experiment):
         """
-        create a plate list from an experiment name
+        create a plate list from an experiment and variant names
         """
         all_subdirs = [i for i in os.listdir(self.input_dir)]
         full_paths = [os.path.join(self.input_dir, i) for i in all_subdirs]
@@ -95,18 +100,23 @@ class MyEventHandler(LoggingEventHandler):
                 wanted_experiment.append(i)
         return wanted_experiment
 
-    def create_plate_list_384(self, experiment):
+    def create_plate_list_384(self, experiment, variant_letter):
         """
-        create a plate list from an experiment name
+        create a plate list from an experiment and variant names
         """
         all_subdirs = [i for i in os.listdir(self.input_dir)]
         full_paths = [os.path.join(self.input_dir, i) for i in all_subdirs]
-        # filter to just those of the specific experiment
+        # filter to just those of the specific experiment and variants
+        variant_ints = self.get_variant_ints_from_letter(variant_letter)
         wanted_experiment = []
         for i in full_paths:
             final_path = os.path.basename(i)
             # 384-well plates have the prefix "S01000000"
-            if final_path[3:9] == experiment and final_path[0] == "S":
+            if (
+                final_path[3:9] == experiment
+                and final_path[0] == "S"
+                and int(final_path[1:3]) in variant_ints
+            ):
                 wanted_experiment.append(i)
         return wanted_experiment
 
@@ -127,3 +137,56 @@ class MyEventHandler(LoggingEventHandler):
         """get the name of the plate from the full directory path"""
         plate_dir = os.path.basename(dir_name)
         return plate_dir.split("__")[0]
+
+    def get_variant_int_from_platen_name(self, plate_name):
+        """docstring"""
+        raise NotImplementedError()
+
+    def create_variant_mapping(self):
+        """
+        Create variant mapping dictionary, to map the paired sequential
+        numbers to a variant letter.
+
+        e.g:
+            1, 2 => "a"
+            3, 4 => "b"
+
+        """
+        # NOTE that at the moment this only goes up to z, so 26 different
+        # variants, although it can possibly reach 49. We will need to figure
+        # out how to handle 27+ if we ever reach that far.
+        variant_dict = dict()
+        for i in range(1, 27):
+            letter_int = math.ceil(i / 2) - 1
+            variant_dict[i] = string.ascii_lowercase[letter_int]
+        return variant_dict
+
+    def reverse_variant_mapping(self, variant_map):
+        """
+        reverse the variant map so we have the possible integers for a given
+        variant letter
+        e.g:
+            {1: "a", 2: "a", 3: "b", 4: "b} => {"a": [1, 2], "b": [3, 4]}
+        """
+        variant_map_rev = defaultdict(list)
+        for integer, letter in variant_map.items():
+            variant_map_rev[letter].append(integer)
+        return variant_map_rev
+
+    def get_variant_letter(self, plate_name):
+        """get variant letter from plate name"""
+        variant_int = int(plate_name[1:3])
+        if variant_int > 26:
+            raise NotImplementedError(
+                "MyEventHandler.variant_mapping only handles variant numbers "
+                + "up to 26. You will need to alter this to use high numbers"
+            )
+        return self.variant_mapping[variant_int]
+
+    def get_variant_ints_from_letter(self, letter):
+        """
+        e.g:
+        "a" => [1, 2]
+        ...
+        """
+        return self.variant_mapping_rev[letter]
