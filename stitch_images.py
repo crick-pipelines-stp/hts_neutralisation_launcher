@@ -46,7 +46,7 @@ class ImageStitcher:
         temp_df_2 = pd.DataFrame({"Row": rows, "Column": cols, "Channel ID": 2})
         temp_df = pd.concat([temp_df_1, temp_df_2]).sort_values(["Row", "Column", "Channel ID"])
         merged = indexfile.merge(temp_df, how="outer")
-        assert merged.shape[0] == 768
+        assert merged.shape[0] == n_expected_rows
         # replace missing URLs with the placeholder URL
         merged["URL"] = merged["URL"].fillna(placeholder_url)
         merged = merged.sort_values(["Row", "Column", "Channel ID"])
