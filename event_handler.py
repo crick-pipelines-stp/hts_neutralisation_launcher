@@ -42,17 +42,16 @@ class MyEventHandler(LoggingEventHandler):
             return None
         plate_name = self.get_plate_name(src_path)
         variant_letter = self.get_variant_letter(plate_name)
-        self.handle_analysis(src_path, experiment, variant_letter)
+        self.handle_analysis(experiment, variant_letter)
         self.handle_stitching(src_path, experiment, plate_name)
 
-    def handle_analysis(self, src_path, experiment, variant_letter):
+    def handle_analysis(self, experiment, variant_letter):
         """
         Determine if valid and new exported data, and if so launches
         a new celery analysis task.
 
         Parameters:
         ------------
-        src_path: string
         experiment: string
         variant_letter: string
 
@@ -66,13 +65,7 @@ class MyEventHandler(LoggingEventHandler):
             )
             return None
         logging.info(f"new experiment: {experiment} variant: {variant_letter}")
-        plate_list_96 = self.create_plate_list_96(experiment)
         plate_list_384 = self.create_plate_list_384(experiment, variant_letter)
-        if len(plate_list_96) == 8:
-            task.background_analysis_96.delay(plate_list_96)
-            logging.info("analysis launched, adding to processed database")
-            # TODO: move to end of celery task
-            self.database.add_processed_experiment(experiment, variant_letter)
         if len(plate_list_384) == 2:
             task.background_analysis_384.delay(plate_list_384)
             logging.info("analysis launched, adding to processed database")
@@ -108,30 +101,13 @@ class MyEventHandler(LoggingEventHandler):
         else:
             logging.info("not a 384 plate, skipping stitching")
 
-    def is_384_plate(self, dir_name, experiment):
+    @staticmethod
+    def is_384_plate(dir_name, experiment):
         """determine if it's a 384-well plate"""
         final_path = os.path.basename(dir_name)
         parsed_experiment = final_path.split("__")[0][-6:]
         return final_path.startswith("S") and parsed_experiment == experiment
-
-    def create_plate_list_96(self, experiment):
-        """
-        create a plate list from an experiment and variant names
-        """
-        all_subdirs = [i for i in os.listdir(self.input_dir)]
-        full_paths = [os.path.join(self.input_dir, i) for i in all_subdirs]
-        # filter to just those of the specific experiment
-        wanted_experiment = []
-        for i in full_paths:
-            final_path = os.path.basename(i)
-            # 96-well plates have the prefix "A11000000"
-            if (
-                final_path[3:9] == experiment
-                and final_path[0] == "A"
-                and final_path[1] in (1, 2, 3, 4)
-            ):
-                wanted_experiment.append(i)
-        return wanted_experiment
+      
 
     def create_plate_list_384(self, experiment, variant_letter):
         """
@@ -153,7 +129,8 @@ class MyEventHandler(LoggingEventHandler):
                 wanted_experiment.append(i)
         return wanted_experiment
 
-    def get_experiment_name(self, dir_name):
+    @staticmethod
+    def get_experiment_name(dir_name):
         """get the name of the experiment from a plate directory"""
         plate_dir = os.path.basename(dir_name)
         if plate_dir.startswith("A"):
@@ -166,12 +143,14 @@ class MyEventHandler(LoggingEventHandler):
             experiment_name = None
         return experiment_name
 
-    def get_plate_name(self, dir_name):
+    @staticmethod
+    def get_plate_name(dir_name):
         """get the name of the plate from the full directory path"""
         plate_dir = os.path.basename(dir_name)
         return plate_dir.split("__")[0]
 
-    def create_variant_mapping(self):
+    @staticmethod
+    def create_variant_mapping():
         """
         Create variant mapping dictionary, to map the paired sequential
         numbers to a variant letter.
@@ -190,7 +169,8 @@ class MyEventHandler(LoggingEventHandler):
             variant_dict[i] = string.ascii_lowercase[letter_int]
         return variant_dict
 
-    def reverse_variant_mapping(self, variant_map):
+    @staticmethod
+    def reverse_variant_mapping(variant_map):
         """
         reverse the variant map so we have the possible integers for a given
         variant letter

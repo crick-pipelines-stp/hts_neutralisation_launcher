@@ -141,7 +141,7 @@ class ImageStitcher:
         self.dilution_images = dilution_images
 
     def save_all(self):
-        output_dir_path = self.create_output_dir()
+        self.create_output_dir()
         if self.dilution_images is None:
             raise RuntimeError("no dilution images, have you run stitch_all_samples()?")
         if self.plate_images is None:
