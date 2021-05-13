@@ -2,6 +2,7 @@ import os
 import json
 from collections import defaultdict
 import itertools
+from urllib.error import HTTPError
 
 import numpy as np
 import pandas as pd
@@ -19,6 +20,7 @@ class ImageStitcher:
     def __init__(
         self, indexfile_path, output_dir="/camp/ABNEUTRALISATION/stitched_images"
     ):
+        self.placeholder_url = "/camp/ABNEUTRALISATION/placeholder_image.png"
         self.indexfile_path = indexfile_path
         self.indexfile = pd.read_csv(indexfile_path, sep="\t")
         self.indexfile = self.fix_missing_wells(self.indexfile)
@@ -38,8 +40,6 @@ class ImageStitcher:
         if indexfile.shape[0] == n_expected_rows:
             # no missing wells, just return the indexfile as it is
             return indexfile
-        # hopefully not get blacklisted from whoever is hosting this
-        placeholder_url = "https://apothekergroup.com/wp-content/uploads/2018/09/placeholder.png"
         # create a dataframe with complete "Row", "Column", "Channel ID" column values
         rows, cols = zip(*itertools.product(range(1, 17), range(1, 25)))
         temp_df_1 = pd.DataFrame({"Row": rows, "Column": cols, "Channel ID": 1})
@@ -48,7 +48,7 @@ class ImageStitcher:
         merged = indexfile.merge(temp_df, how="outer")
         assert merged.shape[0] == n_expected_rows
         # replace missing URLs with the placeholder URL
-        merged["URL"] = merged["URL"].fillna(placeholder_url)
+        merged["URL"] = merged["URL"].fillna(self.placeholder_url)
         merged = merged.sort_values(["Row", "Column", "Channel ID"])
         return merged
 
@@ -58,7 +58,7 @@ class ImageStitcher:
         plate_images = dict()
         for channel_name, group in self.indexfile.groupby("Channel ID"):
             for index, row in group.iterrows():
-                img = skimage.io.imread(row["URL"])
+                img = skimage.io.imread(row["URL"], as_gray=True)
                 # TODO add logging
                 img = skimage.transform.resize(
                     img, well_size, anti_aliasing=True, preserve_range=True
@@ -104,7 +104,7 @@ class ImageStitcher:
                     dilution = utils.get_dilution_from_row_col(
                         group_row["Row"], group_row["Column"]
                     )
-                    img = skimage.io.imread(group_row["URL"])
+                    img = skimage.io.imread(group_row["URL"], as_gray=True)
                     sample_dict[channel_name].update({dilution: img})
         for channel in [1, 2]:
             for dilution in [40, 160, 640, 2560]:

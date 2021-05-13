@@ -1,6 +1,6 @@
 import os
 import time
-from urllib.error import URLError
+from urllib.error import URLError, HTTPError
 import textwrap
 
 import celery
@@ -33,6 +33,7 @@ class BaseTask(celery.Task):
                 {
                     "text": textwrap.dedent(f"""
                         :fire: OH NO! :fire:
+                        **NE pipeline**
                         #####################################
                         {task_id!r} failed
                         #####################################
@@ -74,7 +75,7 @@ def background_analysis_384(plate_list):
     queue="image_stitch",
     base=BaseTask,
     autoretry_for=(
-        ConnectionResetError, FileNotFoundError, URLError, BlockingIOError
+        ConnectionResetError, FileNotFoundError, URLError, HTTPError, BlockingIOError
     )
 )
 def background_image_stitch_384(indexfile_path):
