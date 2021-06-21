@@ -13,7 +13,7 @@ def get_args():
     arg_parser.add_argument(
         "-i", "--input_dir",
         type=str,
-        default="/camp/hts/working/Neutralisation Assay/384_raw_data",
+        default="/camp/ABNEUTRALISATION/NA_raw_data/",
         help="path to directory to monitor for new phenix plates"
     )
     arg_parser.add_argument(

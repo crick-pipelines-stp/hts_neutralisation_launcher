@@ -1,3 +1,11 @@
+import os
+import textwrap
+import requests
+
+
+SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_NEUTRALISATION")
+
+
 def is_even(n):
     return n % 2 == 0
 
@@ -25,3 +33,34 @@ def get_dilution_from_row_col(row, col):
     else:
         raise RuntimeError()
     return dilution
+
+
+def send_slack_alert(exc, task_id, args, kwargs, einfo):
+    """send slack message on failure"""
+    data = {
+        "text": "Something broke",
+        "username": "NE analysis",
+        "attachments": [
+            {
+                "text": textwrap.dedent(
+                    f"""
+                    :fire: OH NO! :fire:
+                    **NE pipeline**
+                    #####################################
+                    {task_id!r} failed
+                    #####################################
+                    args: {args!r}
+                    #####################################
+                    {einfo!r}
+                    #####################################
+                    {exc!r}
+                    #####################################
+                """
+                ),
+                "color": "#ad1720",
+                "attachment_type": "default",
+            }
+        ],
+    }
+    r = requests.post(SLACK_WEBHOOK_URL, json=data)
+    return r.status_code
