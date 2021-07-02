@@ -59,7 +59,7 @@ class MyEventHandler(LoggingEventHandler):
         --------
         None
         """
-        if self.database.is_experiment_processed(int(experiment), variant_letter):
+        if self.database.is_experiment_processed(experiment, variant_letter):
             logging.info(
                 f"experiment: {experiment} variant: {variant_letter} has already been analysed"
             )
@@ -67,6 +67,7 @@ class MyEventHandler(LoggingEventHandler):
         logging.info(f"new experiment: {experiment} variant: {variant_letter}")
         plate_list_384 = self.create_plate_list_384(experiment, variant_letter)
         if len(plate_list_384) == 2:
+            logging.info(f"both plates for {experiment}: {variant} found")
             task.background_analysis_384.delay(plate_list_384)
             logging.info("analysis launched")
 

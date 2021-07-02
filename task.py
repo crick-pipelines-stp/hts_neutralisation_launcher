@@ -85,7 +85,7 @@ class BaseTask(celery.Task):
         # both workflows in args are the same
         workflow_set = set()
         for path in paths:
-            workflow = os.path.basename(path).split("__")[0][6:]
+            workflow = os.path.basename(path).split("__")[0][-6:]
             workflow_set.add(workflow)
         assert len(workflow_set) == 1, "multiple workflows detected"
         workflow_single = list(workflow_set)[0]
