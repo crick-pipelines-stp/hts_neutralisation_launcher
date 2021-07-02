@@ -42,16 +42,20 @@ class MyEventHandler(LoggingEventHandler):
             return None
         plate_name = self.get_plate_name(src_path)
         variant_letter = self.variant_mapper.get_variant_letter(plate_name)
-        self.handle_analysis(experiment, variant_letter)
+        plate_list_384 = self.create_plate_list_384(experiment, variant_letter)
+        # check both duplicates have been exported
+        if len(plate_list_384) == 2:
+            self.handle_analysis(plate_list_384, experiment, variant_letter)
         self.handle_stitching(src_path, experiment, plate_name)
 
-    def handle_analysis(self, experiment, variant_letter):
+    def handle_analysis(self, plate_list_384, experiment, variant_letter):
         """
         Determine if valid and new exported data, and if so launches
         a new celery analysis task.
 
         Parameters:
         ------------
+        plate_list: list of plate paths from self.create_plate_list_384()
         experiment: string
         variant_letter: string
 
@@ -65,11 +69,10 @@ class MyEventHandler(LoggingEventHandler):
             )
             return None
         logging.info(f"new experiment: {experiment} variant: {variant_letter}")
-        plate_list_384 = self.create_plate_list_384(experiment, variant_letter)
-        if len(plate_list_384) == 2:
-            logging.info(f"both plates for {experiment}: {variant} found")
-            task.background_analysis_384.delay(plate_list_384)
-            logging.info("analysis launched")
+        assert len(plate_list_384) == 2
+        logging.info(f"both plates for {experiment}: {variant} found")
+        task.background_analysis_384.delay(plate_list_384)
+        logging.info("analysis launched")
 
     def handle_stitching(self, src_path, experiment, plate_name):
         """
