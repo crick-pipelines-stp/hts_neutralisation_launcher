@@ -70,7 +70,7 @@ class MyEventHandler(LoggingEventHandler):
             return None
         logging.info(f"new experiment: {experiment} variant: {variant_letter}")
         assert len(plate_list_384) == 2
-        logging.info(f"both plates for {experiment}: {variant} found")
+        logging.info(f"both plates for {experiment}: {variant_letter} found")
         task.background_analysis_384.delay(plate_list_384)
         logging.info("analysis launched")
 
