@@ -59,7 +59,7 @@ class MyEventHandler(LoggingEventHandler):
         --------
         None
         """
-        if self.database.is_experiment_processed(experiment, variant_letter):
+        if self.database.is_experiment_processed(int(experiment), variant_letter):
             logging.info(
                 f"experiment: {experiment} variant: {variant_letter} has already been analysed"
             )
