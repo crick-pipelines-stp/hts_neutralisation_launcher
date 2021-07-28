@@ -14,9 +14,8 @@ import utils
 from well_dict import well_dict as WELL_DICT
 
 
-HARMONY_NAME=""
-HARMONY_IP_ADDRESS=""
-
+HARMONY_NAME="1400l18172"
+HARMONY_IP_ADDRESS="10.6.58.52"
 
 
 class ImageStitcher:
