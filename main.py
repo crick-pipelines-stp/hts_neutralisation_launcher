@@ -13,13 +13,13 @@ def get_args():
     arg_parser.add_argument(
         "-i", "--input_dir",
         type=str,
-        default="/camp/ABNEUTRALISATION/NA_raw_data/",
+        default="/mnt/proj-c19/ABNEUTRALISATION/NA_raw_data/",
         help="path to directory to monitor for new phenix plates"
     )
     arg_parser.add_argument(
         "-l", "--log_file",
         type=str,
-        default="/camp/hts/working/scott/neutralisation_watchdog.log",
+        default="/mnt/proj-c19/hts/working/scott/neutralisation_watchdog.log",
         help="where to save the logfile"
     )
     arg_parser.add_argument(

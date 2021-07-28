@@ -12,8 +12,8 @@ import utils
 from variant_mapper import VariantMapper
 
 
-REDIS_PORT = 7777
-DB_PATH = "/home/warchas/plaque_assay_dev/hts_neutralisation_launcher/processed_experiments.sqlite"
+REDIS_PORT = 6379
+DB_PATH = os.path.expanduser("~/hts_neutralisation_launcher/processed_experiments.sqlite")
 
 
 celery = celery.Celery(

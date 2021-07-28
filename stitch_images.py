@@ -14,13 +14,18 @@ import utils
 from well_dict import well_dict as WELL_DICT
 
 
+HARMONY_NAME=""
+HARMONY_IP_ADDRESS=""
+
+
+
 class ImageStitcher:
     """docstring"""
 
     def __init__(
-        self, indexfile_path, output_dir="/camp/ABNEUTRALISATION/stitched_images"
+        self, indexfile_path, output_dir="/mnt/proj-c19/ABNEUTRALISATION/stitched_images"
     ):
-        self.placeholder_url = "/camp/ABNEUTRALISATION/placeholder_image.png"
+        self.placeholder_url = "/mnt/proj-c19/ABNEUTRALISATION/placeholder_image.png"
         self.indexfile_path = indexfile_path
         self.indexfile = pd.read_csv(indexfile_path, sep="\t")
         self.indexfile = self.fix_missing_wells(self.indexfile)
@@ -58,7 +63,11 @@ class ImageStitcher:
         plate_images = dict()
         for channel_name, group in self.indexfile.groupby("Channel ID"):
             for index, row in group.iterrows():
-                img = skimage.io.imread(row["URL"], as_gray=True)
+                # vm doesn't find harmony computer by name, replace with ip
+                # address in URLs
+                url = row["URL"]
+                url = url.replace(HARMONY_NAME, HARMONY_IP_ADDRESS)
+                img = skimage.io.imread(url, as_gray=True)
                 # TODO add logging
                 img = skimage.transform.resize(
                     img, well_size, anti_aliasing=True, preserve_range=True
@@ -104,7 +113,11 @@ class ImageStitcher:
                     dilution = utils.get_dilution_from_row_col(
                         group_row["Row"], group_row["Column"]
                     )
-                    img = skimage.io.imread(group_row["URL"], as_gray=True)
+                    # vm doesn't find harmony computer by name, replace with ip
+                    # address in URLs
+                    url = group_row["URL"]
+                    url = url.replace(HARMONY_NAME, HARMONY_IP_ADDRESS)
+                    img = skimage.io.imread(url, as_gray=True)
                     sample_dict[channel_name].update({dilution: img})
         for channel in [1, 2]:
             for dilution in [40, 160, 640, 2560]:
