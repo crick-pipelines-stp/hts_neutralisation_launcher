@@ -24,7 +24,7 @@ celery = celery.Celery(
 
 
 class BaseTask(celery.Task):
-  
+
     def on_success(self, retval, task_id, args, kwargs):
         """
         update sqlite database to record already-run
@@ -46,7 +46,7 @@ class BaseTask(celery.Task):
         if task_type == "analysis":
             workflow_id = self.get_workflow(args)
             variant = self.get_variant(args)
-            database.add_processed_experiment(workflow_id, variant)
+            database.mark_analysis_entry_as_finished(workflow_id, variant)
         if task_type == "stitching":
             plate_name = self.get_plate_name(args)
             database.add_stitched_plate(plate_name)

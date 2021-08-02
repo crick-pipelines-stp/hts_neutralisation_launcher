@@ -1,12 +1,11 @@
 import logging
 import os
-import math
-import string
-from collections import defaultdict
+import textwrap
 
 from watchdog.events import LoggingEventHandler
 
 import task
+import utils
 from variant_mapper import VariantMapper
 from db import Database
 
@@ -63,16 +62,44 @@ class MyEventHandler(LoggingEventHandler):
         --------
         None
         """
-        if self.database.is_experiment_processed(experiment, variant_letter):
+        analysis_state = self.database.get_analysis_state(experiment, variant_letter)
+        if analysis_state == "finished":
             logging.info(
                 f"experiment: {experiment} variant: {variant_letter} has already been analysed"
             )
             return None
-        logging.info(f"new experiment: {experiment} variant: {variant_letter}")
-        assert len(plate_list_384) == 2
-        logging.info(f"both plates for {experiment}: {variant_letter} found")
-        task.background_analysis_384.delay(plate_list_384)
-        logging.info("analysis launched")
+        elif analysis_state == "recent":
+            logging.info(
+                f"experiment: {experiment} variant: {variant_letter} has recently been added to the job queue, skipping..."
+            )
+            return None
+        elif analysis_state == "stuck":
+            # reset create_at timestamp and resubmit to job queue
+            logging.info(f"experiment: {experiment} variant: {variant_letter} has old processed entry but not finished, resubmitting to job queue...")
+            self.database.update_analysis_entry(experiment, variant_letter)
+            assert len(plate_list_384) == 2
+            logging.info(f"both plates for {experiment}: {variant_letter} found")
+            task.background_analysis_384.delay(plate_list_384)
+            logging.info("analysis launched")
+        elif analysis_state == "does not exist":
+            logging.info(f"new experiment: {experiment} variant: {variant_letter}")
+            assert len(plate_list_384) == 2
+            logging.info(f"both plates for {experiment}: {variant_letter} found")
+            self.database.create_analysis_entry(experiment, variant_letter)
+            task.background_analysis_384.delay(plate_list_384)
+            logging.info("analysis launched")
+        else:
+            logging.error(f"invalid analysis state {analysis_state}, sending slack alert")
+            message = textwrap.dedent(
+                f"""
+                Invalid analysis state ({analysis_state}) when checking with
+                `Database.get_analysis_state()`.
+                """
+            )
+            return_code = utils.send_simple_slack_alert(experiment, variant_letter, message)
+            if return_code != 200:
+                logging.error(f"{return_code}: failed to send slack alert")
+            return None
 
     def handle_stitching(self, src_path, experiment, plate_name):
         """

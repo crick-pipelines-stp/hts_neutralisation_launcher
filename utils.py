@@ -64,3 +64,33 @@ def send_slack_alert(exc, task_id, args, kwargs, einfo):
     }
     r = requests.post(SLACK_WEBHOOK_URL, json=data)
     return r.status_code
+
+
+def send_simple_slack_alert(workflow_id, variant, message):
+    """send slack message on failure"""
+    data = {
+        "text": "Something broke",
+        "username": "NE analysis",
+        "attachments": [
+            {
+                "text": textwrap.dedent(
+                    f"""
+                    :fire: OH NO! :fire:
+                    **neutralisation launcher**
+                    Something went wrong with the launcher
+                    #####################################
+                    workflow_id: {workflow_id}
+                    #####################################
+                    variant: {variant}
+                    #####################################
+                    info:
+                    {message}
+                """
+                ),
+                "color": "#ad1720",
+                "attachment_type": "default",
+            }
+        ],
+    }
+    r = requests.post(SLACK_WEBHOOK_URL, json=data)
+    return r.status_code
