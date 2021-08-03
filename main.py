@@ -20,7 +20,7 @@ def get_args():
     arg_parser.add_argument(
         "-l", "--log_file",
         type=str,
-        default="/mnt/proj-c19/hts/working/scott/neutralisation_watchdog.log",
+        default="/mnt/proj-c19/ABNEUTRALISATION/analysis_logs/neutralisation_watchdog.log",
         help="where to save the logfile"
     )
     arg_parser.add_argument(
