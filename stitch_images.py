@@ -14,8 +14,12 @@ import utils
 from well_dict import well_dict as WELL_DICT
 
 
-HARMONY_NAME="1400l18172"
-HARMONY_IP_ADDRESS="10.6.58.52"
+# first phenix
+HARMONY_1_NAME="1400l18172"
+HARMONY_1_IP_ADDRESS="10.6.58.52"
+# second phenix
+HARMONY_2_NAME="2400l21087"
+HARMONY_2_IP_ADDRESS="10.6.48.135"
 
 
 class ImageStitcher:
@@ -56,16 +60,25 @@ class ImageStitcher:
         merged = merged.sort_values(["Row", "Column", "Channel ID"])
         return merged
 
+    @staticmethod
+    def fix_url(url):
+        """
+        vm doesn't find harmony computer by name, replace with ip
+        address in URLs
+        """
+        if url.startswith(f"http://{HARMONY_1_NAME}/"):
+            url = url.replace(HARMONY_1_NAME, HARMONY_1_IP_ADDRESS)
+        if url.startswith(f"http://{HARMONY_2_NAME}/"):
+            url = url.replace(HARMONY_2_NAME, HARMONY_2_IP_ADDRESS)
+        return url
+
     def stitch_plate(self, well_size=(80, 80)):
         """docstring"""
         ch_images = {1: [], 2: []}
         plate_images = dict()
         for channel_name, group in self.indexfile.groupby("Channel ID"):
             for index, row in group.iterrows():
-                # vm doesn't find harmony computer by name, replace with ip
-                # address in URLs
-                url = row["URL"]
-                url = url.replace(HARMONY_NAME, HARMONY_IP_ADDRESS)
+                url = fix_url(row["URL"])
                 img = skimage.io.imread(url, as_gray=True)
                 # TODO add logging
                 img = skimage.transform.resize(
