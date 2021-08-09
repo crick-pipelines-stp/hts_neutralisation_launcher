@@ -2,8 +2,6 @@ import os
 import textwrap
 import requests
 
-import utils
-
 
 SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_NEUTRALISATION")
 
