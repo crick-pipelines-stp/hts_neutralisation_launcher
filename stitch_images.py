@@ -78,7 +78,7 @@ class ImageStitcher:
         plate_images = dict()
         for channel_name, group in self.indexfile.groupby("Channel ID"):
             for index, row in group.iterrows():
-                url = fix_url(row["URL"])
+                url = self.fix_url(row["URL"])
                 img = skimage.io.imread(url, as_gray=True)
                 # TODO add logging
                 img = skimage.transform.resize(
@@ -125,10 +125,7 @@ class ImageStitcher:
                     dilution = utils.get_dilution_from_row_col(
                         group_row["Row"], group_row["Column"]
                     )
-                    # vm doesn't find harmony computer by name, replace with ip
-                    # address in URLs
-                    url = group_row["URL"]
-                    url = url.replace(HARMONY_NAME, HARMONY_IP_ADDRESS)
+                    url = self.fix_url(group_row["URL"])
                     img = skimage.io.imread(url, as_gray=True)
                     sample_dict[channel_name].update({dilution: img})
         for channel in [1, 2]:
