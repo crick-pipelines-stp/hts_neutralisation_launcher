@@ -166,6 +166,14 @@ class MyEventHandler(LoggingEventHandler):
             experiment_name = plate_dir.split("__")[0][-6:]
         else:
             logging.error(f"invalid plate directory name {plate_dir}, skipping")
+            # send warning message to slack
+            return_code = utils.send_slack_warning(
+                f"Detected invalid directory name in NA_raw_data: {plate_dir}"
+            )
+            if return_code == 200:
+                logging.info("sent slack warning")
+            else:
+                logging.error("failed to send slack warning")
             experiment_name = None
         return experiment_name
 

@@ -2,6 +2,8 @@ import os
 import textwrap
 import requests
 
+import utils
+
 
 SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_NEUTRALISATION")
 
@@ -58,6 +60,30 @@ def send_slack_alert(exc, task_id, args, kwargs, einfo):
                 """
                 ),
                 "color": "#ad1720",
+                "attachment_type": "default",
+            }
+        ],
+    }
+    r = requests.post(SLACK_WEBHOOK_URL, json=data)
+    return r.status_code
+
+
+def send_slack_warning(message):
+    """send slack warning message"""
+    data = {
+        "text": "Something might be wrong",
+        "username": "NE analysis",
+        "attachments": [
+            {
+                "text": textwrap.dedent(
+                    f"""
+                    :warning: WARNING :warning:
+                    **neutralisation launcher**
+                    ----------------------------
+                    {message}
+                """
+                ),
+                "color": "#ffce00",
                 "attachment_type": "default",
             }
         ],
