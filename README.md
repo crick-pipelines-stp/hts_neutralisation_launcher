@@ -19,6 +19,14 @@ This requires an installation of redis-server, celery and a MySQL driver.
 
 
 ## To run:
+
+```bash
+# starts all processes in a tmux sesssion
+./launch.sh
+```
+
+Or to run manually:
+
 1. Start redis if not already running
 ```
 redis-server
