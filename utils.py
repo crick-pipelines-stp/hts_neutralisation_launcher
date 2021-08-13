@@ -4,6 +4,8 @@ import requests
 
 
 SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_NEUTRALISATION")
+HOST_IP="10.28.41.242"
+PORT=5555
 
 
 def is_even(n):
@@ -45,16 +47,17 @@ def send_slack_alert(exc, task_id, args, kwargs, einfo):
                 "text": textwrap.dedent(
                     f"""
                     :fire: OH NO! :fire:
-                    **NE pipeline**
-                    #####################################
+                    *NE pipeline*
+                    -------------------------------------
                     {task_id!r} failed
-                    #####################################
+                    http://{HOST_IP}:{PORT}/task/{task_id!r}
+                    -------------------------------------
                     args: {args!r}
-                    #####################################
+                    -------------------------------------
                     {einfo!r}
-                    #####################################
+                    -------------------------------------
                     {exc!r}
-                    #####################################
+                    -------------------------------------
                 """
                 ),
                 "color": "#ad1720",
@@ -76,7 +79,7 @@ def send_slack_warning(message):
                 "text": textwrap.dedent(
                     f"""
                     :warning: WARNING :warning:
-                    **neutralisation launcher**
+                    *neutralisation launcher*
                     ----------------------------
                     {message}
                 """
@@ -100,15 +103,16 @@ def send_simple_slack_alert(workflow_id, variant, message):
                 "text": textwrap.dedent(
                     f"""
                     :fire: OH NO! :fire:
-                    **neutralisation launcher**
+                    *neutralisation launcher*
                     Something went wrong with the launcher
-                    #####################################
+                    -------------------------------------
                     workflow_id: {workflow_id}
-                    #####################################
+                    -------------------------------------
                     variant: {variant}
-                    #####################################
+                    -------------------------------------
                     info:
                     {message}
+                    -------------------------------------
                 """
                 ),
                 "color": "#ad1720",

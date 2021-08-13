@@ -1,6 +1,8 @@
 import datetime
 import sqlite3
 
+import utils
+
 
 class Database:
     """class docstring"""
@@ -200,9 +202,9 @@ class Database:
         cursor = conn.cursor()
         if not self._processed_entry_exists(experiment, variant):
             cursor.close()
-            raise RuntimeError(
-                f"no entry found for {experiment} {variant} in processed table, cannot update"
-            )
+            msg = f"no entry found for {experiment} {variant} in processed table, cannot update"
+            utils.send_simple_slack_alert(workflow_id=experiment, variant=variant, message=msg)
+            raise RuntimeError(msg)
         # update `created_at` value to current timestamp
         now = datetime.datetime.utcnow().replace(microsecond=0).isoformat(" ")
         cursor.execute(
@@ -225,9 +227,9 @@ class Database:
         cursor = conn.cursor()
         if not self._processed_entry_exists(experiment, variant):
             cursor.close()
-            raise RuntimeError(
-                f"no entry found for {experiment} {variant} in processed table, cannot update"
-            )
+            msg = f"no entry found for {experiment} {variant} in processed table, cannot update"
+            utils.send_simple_slack_alert(workflow_id=experiment, variant=variant, message=msg)
+            raise RuntimeError(msg)
         # update `finished_at` value to current timestamp
         now = datetime.datetime.utcnow().replace(microsecond=0).isoformat(" ")
         cursor.execute(
