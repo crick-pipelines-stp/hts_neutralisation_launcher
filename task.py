@@ -9,11 +9,9 @@ import db
 import plaque_assay
 import stitch_images
 import utils
-from variant_mapper import VariantMapper
 
 
 REDIS_PORT = 6379
-DB_PATH = os.path.expanduser("~/hts_neutralisation_launcher/processed_experiments.sqlite")
 
 
 celery = celery.Celery(
@@ -27,10 +25,12 @@ class BaseTask(celery.Task):
 
     def on_success(self, retval, task_id, args, kwargs):
         """
-        update sqlite database to record already-run
+        update database to record already-run
         analysis and image-stitching.
         """
-        database = db.Database(path=DB_PATH)
+        engine = db.create_engine()
+        session = db.create_session(engine)
+        database = db.Database(session)
         # args is always a tuple
         # for stitching tasks it's a tuple of 1 string
         #     e.g   ("/camp/ABNEUTRALISATION..../indexfile.txt", )
@@ -45,7 +45,7 @@ class BaseTask(celery.Task):
             raise RuntimeError(f"invalid args: {args}")
         if task_type == "analysis":
             workflow_id = self.get_workflow(args)
-            variant = self.get_variant(args)
+            variant = self.get_variant(args, database)
             database.mark_analysis_entry_as_finished(workflow_id, variant)
         if task_type == "stitching":
             plate_name = self.get_plate_name(args)
@@ -92,18 +92,17 @@ class BaseTask(celery.Task):
         return workflow_single
 
     @staticmethod
-    def get_variant(args):
+    def get_variant(args, database):
         """get variant letter short-code from args"""
         paths = args[0]
         assert len(paths) == 2
-        variant_mapper = VariantMapper()
-        variant_letters = set()
+        variant_set = set()
         for path in paths:
             plate_name = os.path.basename(path).split("__")[0]
-            letter = variant_mapper.get_variant_letter(plate_name)
-            variant_letters.add(letter)
-        assert len(variant_letters) == 1, "multiple variants detected"
-        variant_letter = list(variant_letters)[0]
+            variant = database.get_variant_from_plate_name(plate_name)
+            variant_set.add(variant)
+        assert len(variant_set) == 1, "multiple variants detected"
+        variant_letter = list(variant_set)[0]
         return variant_letter
 
 

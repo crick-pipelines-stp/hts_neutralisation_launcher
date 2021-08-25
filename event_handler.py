@@ -6,8 +6,7 @@ from watchdog.events import LoggingEventHandler
 
 import task
 import utils
-from variant_mapper import VariantMapper
-from db import Database
+import db
 
 
 class MyEventHandler(LoggingEventHandler):
@@ -20,9 +19,9 @@ class MyEventHandler(LoggingEventHandler):
         super().__init__(*args, **kwargs)
         self.input_dir = input_dir
         self.db_path = db_path
-        self.database = Database(db_path)
-        self.database.create()
-        self.variant_mapper = VariantMapper()
+        engine = db.create_engine()
+        session = db.create_session(engine)
+        self.database = db.Database(session)
 
     def on_created(self, event):
         """
@@ -35,19 +34,23 @@ class MyEventHandler(LoggingEventHandler):
         """
         super().on_created(event)
         src_path = event.src_path
-        experiment = self.get_experiment_name(src_path)
-        if experiment is None:
+        workflow_id = self.get_workflow_id(src_path)
+        if workflow_id is None:
             # invalid experiment name, skip
             return None
         plate_name = self.get_plate_name(src_path)
-        variant_letter = self.variant_mapper.get_variant_letter(plate_name)
-        plate_list_384 = self.create_plate_list_384(experiment, variant_letter)
+        try:
+            variant = self.database.get_variant_from_plate_name(plate_name)
+        except ValueError as e:
+            logging.error(e)
+            return None
+        plate_list_384 = self.create_plate_list_384(workflow_id, variant)
         # check both duplicates have been exported
         if len(plate_list_384) == 2:
-            self.handle_analysis(plate_list_384, experiment, variant_letter)
-        self.handle_stitching(src_path, experiment, plate_name)
+            self.handle_analysis(plate_list_384, workflow_id, variant)
+        self.handle_stitching(src_path, workflow_id, plate_name)
 
-    def handle_analysis(self, plate_list_384, experiment, variant_letter):
+    def handle_analysis(self, plate_list_384, workflow_id, variant):
         """
         Determine if valid and new exported data, and if so launches
         a new celery analysis task.
@@ -55,37 +58,37 @@ class MyEventHandler(LoggingEventHandler):
         Parameters:
         ------------
         plate_list: list of plate paths from self.create_plate_list_384()
-        experiment: string
-        variant_letter: string
+        workflow_id: string
+        variant: string
 
         Returns:
         --------
         None
         """
-        analysis_state = self.database.get_analysis_state(experiment, variant_letter)
+        analysis_state = self.database.get_analysis_state(workflow_id, variant)
         if analysis_state == "finished":
             logging.info(
-                f"experiment: {experiment} variant: {variant_letter} has already been analysed"
+                f"workflow_id: {workflow_id} variant: {variant} has already been analysed"
             )
             return None
         elif analysis_state == "recent":
             logging.info(
-                f"experiment: {experiment} variant: {variant_letter} has recently been added to the job queue, skipping..."
+                f"workflow_id: {workflow_id} variant: {variant} has recently been added to the job queue, skipping..."
             )
             return None
         elif analysis_state == "stuck":
             # reset create_at timestamp and resubmit to job queue
-            logging.info(f"experiment: {experiment} variant: {variant_letter} has old processed entry but not finished, resubmitting to job queue...")
-            self.database.update_analysis_entry(experiment, variant_letter)
+            logging.info(f"workflow_id: {workflow_id} variant: {variant} has old processed entry but not finished, resubmitting to job queue...")
+            self.database.update_analysis_entry(workflow_id, variant)
             assert len(plate_list_384) == 2
-            logging.info(f"both plates for {experiment}: {variant_letter} found")
+            logging.info(f"both plates for {workflow_id}: {variant} found")
             task.background_analysis_384.delay(plate_list_384)
             logging.info("analysis launched")
         elif analysis_state == "does not exist":
-            logging.info(f"new experiment: {experiment} variant: {variant_letter}")
+            logging.info(f"new workflow_id: {workflow_id} variant: {variant}")
             assert len(plate_list_384) == 2
-            logging.info(f"both plates for {experiment}: {variant_letter} found")
-            self.database.create_analysis_entry(experiment, variant_letter)
+            logging.info(f"both plates for {workflow_id}: {variant} found")
+            self.database.create_analysis_entry(workflow_id, variant)
             task.background_analysis_384.delay(plate_list_384)
             logging.info("analysis launched")
         else:
@@ -96,12 +99,12 @@ class MyEventHandler(LoggingEventHandler):
                 `Database.get_analysis_state()`.
                 """
             )
-            return_code = utils.send_simple_slack_alert(experiment, variant_letter, message)
+            return_code = utils.send_simple_slack_alert(workflow_id, variant, message)
             if return_code != 200:
                 logging.error(f"{return_code}: failed to send slack alert")
             return None
 
-    def handle_stitching(self, src_path, experiment, plate_name):
+    def handle_stitching(self, src_path, workflow_id, plate_name):
         """
         Determine if valid and new exported data, and if so launches
         a new celery image-stitching task.
@@ -109,14 +112,14 @@ class MyEventHandler(LoggingEventHandler):
         Parameters:
         ------------
         src_path: string
-        experiment: string
+        workflow_id: string
         plate_name: string
 
         Returns:
         --------
         None
         """
-        if self.is_384_plate(src_path, experiment):
+        if self.is_384_plate(src_path, workflow_id):
             logging.info("determined it's a 384 plate")
             if self.database.is_plate_stitched(plate_name):
                 logging.info(f"plate {plate_name} has already been stitched")
@@ -129,31 +132,36 @@ class MyEventHandler(LoggingEventHandler):
             logging.info("not a 384 plate, skipping stitching")
 
     @staticmethod
-    def is_384_plate(dir_name, experiment):
+    def is_384_plate(dir_name, workflow_id):
         """determine if it's a 384-well plate"""
         final_path = os.path.basename(dir_name)
-        parsed_experiment = final_path.split("__")[0][-6:]
-        return final_path.startswith("S") and parsed_experiment == experiment
+        parsed_workflow = final_path.split("__")[0][-6:]
+        return final_path.startswith("S") and parsed_workflow == workflow_id
 
-    def create_plate_list_384(self, experiment, variant_letter):
+    def create_plate_list_384(self, workflow_id, variant):
         """
-        create a plate list from an experiment and variant names
+        create a plate list from an workflow_id and variant names
         """
         all_subdirs = [i for i in os.listdir(self.input_dir)]
         full_paths = [os.path.join(self.input_dir, i) for i in all_subdirs]
-        # filter to just those of the specific experiment and variants
-        variant_ints = self.variant_mapper.get_variant_ints_from_letter(variant_letter)
-        wanted_experiment = []
+        # filter to just those of the specific workflow_id and variants
+        variant_ints = self.database.get_variant_ints_from_name(variant)
+        wanted_workflows = []
         for i in full_paths:
             final_path = os.path.basename(i)
             # 384-well plates have the prefix "S01000000"
             if (
-                final_path[3:9] == experiment
+                final_path[3:9] == workflow_id
                 and final_path[0] == "S"
                 and int(final_path[1:3]) in variant_ints
             ):
-                wanted_experiment.append(i)
-        return wanted_experiment
+                wanted_workflows.append(i)
+        return wanted_workflows
+
+    def get_workflow_id(self, src_path):
+        plate_name = self.get_plate_name(src_path)
+        workflow_id = plate_name[-6:]
+        return workflow_id
 
     @staticmethod
     def get_experiment_name(dir_name):

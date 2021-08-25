@@ -50,5 +50,12 @@ celery --broker=redis://localhost flower -A task --address=0.0.0.0 --port=5555 -
 
 
 ## To re-analyse previously run jobs:
-Analysis jobs are stored in a local sqlite database to stop duplicate entries
-into the LIMS. To re-analyse anything (in case of an error before LIMS upload) you have to delete that entry from `processed_experiments.sqlite`
+A record of analyses and image stitching are stored in the serology LIMS
+database in the `NE_task_tracking_analysis` and `NE_task_tracking_stitching`
+tables respectively. If an entry here matches the workflow_id and variant then
+that plate will not be re-analysed. Therefore to re-launch an analysis then
+those entries will have to be removed from the tables.
+
+N.B: there is also a check before uploading to the LIMS database that there is
+not already an entry for a given workflow and variant. This will require
+removing raw data from the database.
