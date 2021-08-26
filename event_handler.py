@@ -119,17 +119,41 @@ class MyEventHandler(LoggingEventHandler):
         --------
         None
         """
-        if self.is_384_plate(src_path, workflow_id):
-            logging.info("determined it's a 384 plate")
-            if self.database.is_plate_stitched(plate_name):
-                logging.info(f"plate {plate_name} has already been stitched")
-                return None
-            logging.info(f"new plate {plate_name}")
+        if not self.is_384_plate(src_path, workflow_id):
+            logging.warning("not a 384 plate, skipping stitching")
+            return None
+        logging.info(f"determined {plate_name} is a 384 plate")
+        stitching_state = self.database.get_stitching_state(plate_name)
+        if stitching_state == "finished":
+            # already stitched, ignore
+            logging.info(f"plate: {plate_name} has already been stitched")
+        elif stitching_state == "recent":
+            # recent, ignore
+            logging.info(f"plate: {plate_name} has recently been submitted, skipping...")
+        elif stitching_state == "stuck":
+            # reset create_at timestamp and resubmit to job queue
+            logging.info(f"plate: {plate_name} has old processed entry but not finished, resubmitting to job queue...")
+            self.database.update_stitching_entry(plate_name)
             indexfile_path = os.path.join(src_path, "indexfile.txt")
             task.background_image_stitch_384.delay(indexfile_path)
-            logging.info("stitching launched")
+            logging.info(f"stitching launched for plate: {plate_name}")
+        elif stitching_state == "does not exist":
+            # create new entry and submit to job queue
+            self.database.create_stitching_entry(plate_name)
+            indexfile_path = os.path.join(src_path, "indexfile.txt")
+            task.background_image_stitch_384.delay(indexfile_path)
+            logging.info(f"stitching launched for plate: {plate_name}")
         else:
-            logging.info("not a 384 plate, skipping stitching")
+            logging.error(f"invalid stitching state {stitching_state}, sending slack alert")
+            message = textwrap.dedent(
+                f"""
+                Invalid stitching state ({stitching_state}) when checking with
+                `Database.get_stitching_state()`.
+                """
+            )
+            return_code = utils.send_simple_slack_warning(message)
+            if return_code != 200:
+                logging.error(f"{return_code}: failed to send slack alert")
 
     @staticmethod
     def is_384_plate(dir_name, workflow_id):

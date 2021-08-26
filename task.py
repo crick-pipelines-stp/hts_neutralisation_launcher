@@ -49,7 +49,7 @@ class BaseTask(celery.Task):
             database.mark_analysis_entry_as_finished(workflow_id, variant)
         if task_type == "stitching":
             plate_name = self.get_plate_name(args)
-            database.add_stitched_plate(plate_name)
+            database.mark_stitching_entry_as_finished(plate_name)
 
     def on_failure(self, exc, task_id, args, kwargs, einfo):
         """send slack alert on task failure"""

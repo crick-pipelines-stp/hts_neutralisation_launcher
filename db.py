@@ -132,6 +132,24 @@ class Database:
                     # (will have to update the created_at time)
                     return "stuck"
 
+    def get_stitching_state(self, plate_name):
+        """docstring"""
+        result = (
+            self.session.query(models.Stitching)
+            .filter(models.Stitching.plate_name == plate_name)
+            .first()
+        )
+        if result is None:
+            return "does not exist"
+        if result.finished_at is not None:
+            return "finished"
+        else:
+            # see if it's been recently submitted
+            time_now = datetime.datetime.utcnow()
+            time_difference = (time_now - result.created_at).total_seconds()
+            is_recent = int(time_difference) < 60*30
+            return "recent" if is_recent else "stuck"
+
     def is_plate_stitched(self, plate_name):
         """
         Check if a plate is already stitched.
@@ -209,7 +227,23 @@ class Database:
             .update({models.Analysis.finished_at: now})
         self.session.commit()
 
-    def add_stitched_plate(self, plate_name):
+    def update_stitching_entry(self, plate_name):
+        now = datetime.datetime.utcnow().replace(microsecond=0).isoformat(" ")
+        self.session\
+            .query(models.Stitching)\
+            .filter(models.Stitching.plate_name == plate_name)\
+            .update({models.Stitching.created_at: now})
+        self.session.commit()
+
+    def mark_stitching_entry_as_finished(self, plate_name):
+        now = datetime.datetime.utcnow().replace(microsecond=0).isoformat(" ")
+        self.session\
+            .query(models.Stitching)\
+            .filter(models.Stitching.plate_name == plate_name)\
+            .update({models.Stitching.finished_at: now})
+        self.session.commit()
+
+    def create_stitching_entry(self, plate_name):
         """add a plate to the stitched database"""
         stitched_plate = models.Stitching(plate_name=plate_name)
         self.session.add(stitched_plate)
