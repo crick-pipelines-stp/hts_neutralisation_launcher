@@ -168,8 +168,8 @@ class Database:
         result = (
             self.session.query(models.Analysis)
             .filter(
-                workflow_id == int(workflow_id),
-                variant == variant
+                models.Analysis.workflow_id == int(workflow_id),
+                models.Analysis.variant == variant
             )
             .first()
         )
