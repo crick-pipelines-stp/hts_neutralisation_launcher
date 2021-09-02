@@ -2,10 +2,12 @@ import datetime
 import os
 
 import sqlalchemy
+import sqlalchemy.exc
 from sqlalchemy import or_
 
 import models
 import utils
+from retry import retry
 
 
 def create_engine(test=False):
@@ -36,6 +38,11 @@ class Database:
     def __init__(self, session):
         self.session = session
 
+    @staticmethod
+    def now():
+        return datetime.datetime.utcnow().replace(microsecond=0).isoformat(" ")
+
+    @retry(sqlalchemy.exc.OperationalError)
     def get_variant_from_plate_name(self, plate_name):
         """
         plate_name is os.path.basename(full_path).split("__")[0]
@@ -60,6 +67,7 @@ class Database:
             )
         return result.mutant_strain
 
+    @retry(sqlalchemy.exc.OperationalError)
     def get_variant_ints_from_name(self, variant_name):
         """
         get plate prefix integers from variant name.
@@ -73,6 +81,7 @@ class Database:
         )
         return sorted([int(result.plate_id_1[1:]), int(result.plate_id_2[1:])])
 
+    @retry(sqlalchemy.exc.OperationalError)
     def get_analysis_state(self, workflow_id, variant):
         """
         Get the current state of an analysis from the `processed` table.
@@ -132,6 +141,7 @@ class Database:
                     # (will have to update the created_at time)
                     return "stuck"
 
+    @retry(sqlalchemy.exc.OperationalError)
     def get_stitching_state(self, plate_name):
         """docstring"""
         result = (
@@ -150,6 +160,7 @@ class Database:
             is_recent = int(time_difference) < 60*30
             return "recent" if is_recent else "stuck"
 
+    @retry(sqlalchemy.exc.OperationalError)
     def is_plate_stitched(self, plate_name):
         """
         Check if a plate is already stitched.
@@ -167,6 +178,7 @@ class Database:
         )
         return result is not None
 
+    @retry(sqlalchemy.exc.OperationalError)
     def create_analysis_entry(self, workflow_id, variant):
         """
         run on task submission
@@ -176,11 +188,13 @@ class Database:
         """
         analysis = models.Analysis(
             workflow_id=int(workflow_id),
-            variant=variant
+            variant=variant,
+            created_at=self.now()
         )
         self.session.add(analysis)
         self.session.commit()
 
+    @retry(sqlalchemy.exc.OperationalError)
     def _processed_entry_exists(self, workflow_id, variant):
         """check if a row exists for a given workflow_id/variant"""
         result = (
@@ -196,9 +210,12 @@ class Database:
     def _alert_if_not_exists(self, workflow_id, variant):
         if not self._processed_entry_exists(workflow_id, variant):
             msg = f"no entry found for {workflow_id} {variant} in processed table, cannot update"
-            utils.send_simple_slack_alert(workflow_id=workflow_id, variant=variant, message=msg)
+            utils.send_simple_slack_alert(
+                workflow_id=workflow_id, variant=variant, message=msg
+            )
             raise RuntimeError(msg)
 
+    @retry(sqlalchemy.exc.OperationalError)
     def update_analysis_entry(self, workflow_id, variant):
         """
         run on task re-submission after delay
@@ -207,44 +224,46 @@ class Database:
         to current timestamp when relaunching a stuck experiment.
         """
         self._alert_if_not_exists(workflow_id, variant)
-        now = datetime.datetime.utcnow().replace(microsecond=0).isoformat(" ")
         self.session\
             .query(models.Analysis)\
             .filter(models.Analysis.workflow_id == int(workflow_id))\
             .filter(models.Analysis.variant == variant)\
-            .update({models.Analysis.created_at: now})
+            .update({models.Analysis.created_at: self.now()})
         self.session.commit()
 
+    @retry(sqlalchemy.exc.OperationalError)
     def mark_analysis_entry_as_finished(self, workflow_id, variant):
         """run on task success"""
         self._alert_if_not_exists(workflow_id, variant)
         # update `finished_at` value to current timestamp
-        now = datetime.datetime.utcnow().replace(microsecond=0).isoformat(" ")
         self.session\
             .query(models.Analysis)\
             .filter(models.Analysis.workflow_id == int(workflow_id))\
             .filter(models.Analysis.variant == variant)\
-            .update({models.Analysis.finished_at: now})
+            .update({models.Analysis.finished_at: self.now()})
         self.session.commit()
 
+    @retry(sqlalchemy.exc.OperationalError)
     def update_stitching_entry(self, plate_name):
-        now = datetime.datetime.utcnow().replace(microsecond=0).isoformat(" ")
         self.session\
             .query(models.Stitching)\
             .filter(models.Stitching.plate_name == plate_name)\
-            .update({models.Stitching.created_at: now})
+            .update({models.Stitching.created_at: self.now()})
         self.session.commit()
 
+    @retry(sqlalchemy.exc.OperationalError)
     def mark_stitching_entry_as_finished(self, plate_name):
-        now = datetime.datetime.utcnow().replace(microsecond=0).isoformat(" ")
         self.session\
             .query(models.Stitching)\
             .filter(models.Stitching.plate_name == plate_name)\
-            .update({models.Stitching.finished_at: now})
+            .update({models.Stitching.finished_at: self.now()})
         self.session.commit()
 
+    @retry(sqlalchemy.exc.OperationalError)
     def create_stitching_entry(self, plate_name):
         """add a plate to the stitched database"""
-        stitched_plate = models.Stitching(plate_name=plate_name)
+        stitched_plate = models.Stitching(
+            plate_name=plate_name, created_at=self.now()
+        )
         self.session.add(stitched_plate)
         self.session.commit()
