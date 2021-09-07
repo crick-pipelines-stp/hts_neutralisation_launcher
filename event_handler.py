@@ -44,6 +44,16 @@ class MyEventHandler(LoggingEventHandler):
         except ValueError as e:
             logging.error(e)
             return None
+        if self.is_titration_plate(plate_name):
+            logging.info(f"plate: {plate_name} detected as a titration plate")
+            # TODO: check we have both replicate plates
+            plate_list_titration = self.create_plate_list_384(
+                workflow_id, variant, titration=True
+            )
+            if len(plate_list_titration) == 2:
+                self.handle_titration(plate_list_titration, workflow_id, variant)
+            # return as to NOT submit analysis or stitching tasks
+            return None
         plate_list_384 = self.create_plate_list_384(workflow_id, variant)
         # check both duplicates have been exported
         if len(plate_list_384) == 2:
@@ -155,6 +165,62 @@ class MyEventHandler(LoggingEventHandler):
             if return_code != 200:
                 logging.error(f"{return_code}: failed to send slack alert")
 
+    def handle_titration(self, plate_list_384, workflow_id, variant):
+        """
+        Determine if valid and new exported data, and if so launches
+        a new celery titration analysis
+
+        Parameters:
+        ------------
+        plate_list: list of plate paths from self.create_plate_list_384()
+        workflow_id: string
+        plate_name: string
+
+        Returns:
+        --------
+        None
+        """
+        # TODO: make this
+        raise NotImplementedError("not made this yet!")
+        titration_state = self.database.get_titration_state(workflow_id, variant)
+        if titration_state == "finished":
+            logging.info(
+                f"workflow_id: {workflow_id} variant: {variant} has already been analysed"
+            )
+            return None
+        elif titration_state == "recent":
+            logging.info(
+                f"workflow_id: {workflow_id} variant: {variant} has recently been added to the job queue, skipping..."
+            )
+            return None
+        elif titration_state == "stuck":
+            # reset create_at timestamp and resubmit to job queue
+            logging.info(f"workflow_id: {workflow_id} variant: {variant} has old processed entry but not finished, resubmitting to job queue...")
+            self.database.update_titration_entry(workflow_id, variant)
+            assert len(plate_list_384) == 2
+            logging.info(f"both plates for {workflow_id}: {variant} found")
+            task.background_titration_analysis_384.delay(plate_list_384)
+            logging.info("titration analysis launched")
+        elif titration_state == "does not exist":
+            logging.info(f"new workflow_id: {workflow_id} variant: {variant}")
+            assert len(plate_list_384) == 2
+            logging.info(f"both plates for {workflow_id}: {variant} found")
+            self.database.create_titration_entry(workflow_id, variant)
+            task.background_titration_analysis_384.delay(plate_list_384)
+            logging.info("titration analysis launched")
+        else:
+            logging.error(f"invalid titration analysis state {titration_state}, sending slack alert")
+            message = textwrap.dedent(
+                f"""
+                Invalid titration analysis state ({titration_state}) when checking with
+                `Database.get_titration_state()`.
+                """
+            )
+            return_code = utils.send_simple_slack_alert(workflow_id, variant, message)
+            if return_code != 200:
+                logging.error(f"{return_code}: failed to send slack alert")
+            return None
+
     @staticmethod
     def is_384_plate(dir_name, workflow_id):
         """determine if it's a 384-well plate"""
@@ -162,10 +228,26 @@ class MyEventHandler(LoggingEventHandler):
         parsed_workflow = final_path.split("__")[0][-6:]
         return final_path.startswith("S") and parsed_workflow == workflow_id
 
-    def create_plate_list_384(self, workflow_id, variant):
+    def create_plate_list_384(self, workflow_id, variant, titration=False):
         """
         create a plate list from an workflow_id and variant names
+
+        Parameters
+        ----------
+        worflow_id: string
+            workflow ID as a zero-padded string
+        variant: string
+            full variant name as entered in the LIMS
+        titration: bool
+            Whether or not we're creating a titration plate list.
+            This determines what plate prefix we're looking for
+            as titration plates begin with T and assay plates begin with S.
+
+        Returns
+        -------
+        List of full paths to plates
         """
+        prefix_char = "T" if titration else "S"
         all_subdirs = [i for i in os.listdir(self.input_dir)]
         full_paths = [os.path.join(self.input_dir, i) for i in all_subdirs]
         # filter to just those of the specific workflow_id and variants
@@ -176,16 +258,28 @@ class MyEventHandler(LoggingEventHandler):
             # 384-well plates have the prefix "S01000000"
             if (
                 final_path[3:9] == workflow_id
-                and final_path[0] == "S"
+                and final_path[0] == prefix_char
                 and int(final_path[1:3]) in variant_ints
             ):
                 wanted_workflows.append(i)
         return wanted_workflows
 
     def get_workflow_id(self, src_path):
+        """
+        returns workflow id as zero-padded string
+        e.g src_path("/some/path/S01000999__2021_01_01
+        """
         plate_name = self.get_plate_name(src_path)
         workflow_id = plate_name[-6:]
         return workflow_id
+
+    @staticmethod
+    def is_titration_plate(plate_name):
+        """
+        determines if a plate is a titration plate.
+        titrations plates starts with T{variant_ints}{workflow_id}
+        """
+        return plate_name.startswith("T") and plate_name[1:].isdigit()
 
     @staticmethod
     def get_experiment_name(dir_name):
@@ -211,6 +305,10 @@ class MyEventHandler(LoggingEventHandler):
 
     @staticmethod
     def get_plate_name(dir_name):
-        """get the name of the plate from the full directory path"""
+        """
+        get the name of the plate from the full directory path
+        e.g get_plate_name("/some/path/S01000999__2021-01-01T00_00_00-Measurement 1")
+            => "S01000999"
+        """
         plate_dir = os.path.basename(dir_name)
         return plate_dir.split("__")[0]

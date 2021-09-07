@@ -1,11 +1,16 @@
 import datetime
 import os
+import sqlite3
+from collections import namedtuple
 
 import sqlalchemy
 from sqlalchemy import or_
 
 import models
 import utils
+
+
+TITRATION_SQLITE_PATH = "titration_task_tracking.db"
 
 
 def create_engine(test=False):
@@ -35,6 +40,10 @@ class Database:
 
     def __init__(self, session):
         self.session = session
+        # TODO: remove once titration task tracking is added to lims db
+        self.titration_sqlite_db_path = TITRATION_SQLITE_PATH
+        if not os.path.isfile(TITRATION_SQLITE_PATH):
+            self.create_titration_sqlite_db()
 
     def get_variant_from_plate_name(self, plate_name):
         """
@@ -73,7 +82,7 @@ class Database:
         )
         return sorted([int(result.plate_id_1[1:]), int(result.plate_id_2[1:])])
 
-    def get_analysis_state(self, workflow_id, variant):
+    def get_analysis_state(self, workflow_id, variant, titration=False):
         """
         Get the current state of an analysis from the `processed` table.
 
@@ -96,19 +105,48 @@ class Database:
         -----------
             workflow_id: string
             variant: string
+            titration: bool
+                whether or not this is a titration workflow
         Returns:
         --------
             string, one of:
             ("does not exist", "finished", "recent", "stuck")
         """
-        result = (
-            self.session.query(models.Analysis)
-            .filter(
-                models.Analysis.workflow_id == int(workflow_id),
-                models.Analysis.variant == variant,
+        if titration:
+            # NOTE: titration workflow for the moment is in a separate sqlite
+            # file until CS is back from holiday.
+            # Later on this will be changed to it's in the LIMS database.
+            result_tuple = namedtuple("Result", ["created_at", "finished_at"])
+            con = sqlite3.connect(self.titration_sqlite_db_path)
+            cur = con.cursor()
+            cur.execute(
+                """
+                SELECT
+                    created_at, finished_at
+                FROM
+                    titration_task_tracking
+                WHERE
+                    workflow_id=? AND variant=?
+                """,
+                (int(workflow_id), variant)
             )
-            .first()
-        )
+            db_fetched = cur.fetchone()
+            con.close()
+            if db_fetched:  # if not None
+                # convert into namedtuple so we can access created_at and
+                # finished_at as from sqlalchemy
+                result = result_tuple(*db_fetched)
+            else:
+                result = None
+        else:  # is analysis
+            result = (
+                self.session.query(models.Analysis)
+                .filter(
+                    models.Analysis.workflow_id == int(workflow_id),
+                    models.Analysis.variant == variant,
+                )
+                .first()
+            )
         if result is None:
             # no row for the given workflow_id and variant
             return "does not exist"
@@ -248,3 +286,81 @@ class Database:
         stitched_plate = models.Stitching(plate_name=plate_name)
         self.session.add(stitched_plate)
         self.session.commit()
+
+    def create_titration_sqlite_db(self):
+        """
+        temporary method while not using the LIMS db for titration tracking
+        """
+        con = sqlite3.connect(self.titration_sqlite_db_path)
+        cur = con.cursor()
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS titration_task_tracking (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at DATETIME NOT NULL,
+                finished_at DATETIME,
+                workflow_id INTEGER NOT NULL,
+                variant VARCHAR(45) NOT NULL
+            );
+            """
+        )
+        con.commit()
+        con.close()
+
+    def create_titration_entry(self, workflow_id, variant):
+        # TODO: update to lims db and sqlalchemy
+        now = datetime.datetime.utcnow().replace(microsecond=0).isoformat(" ")
+        con = sqlite3.connect(self.titration_sqlite_db_path)
+        cur = con.cursor()
+        cur.execute(
+            """
+            INSERT
+                into titration_task_tracking (
+                    created_at, finished_at, variant, workflow_id
+                )
+            VALUES
+                (?, ?, ?, ?);
+            """,
+            (now, None, variant, int(workflow_id))
+
+        )
+        con.commit()
+        con.close()
+
+    def update_titration_entry(self, workflow_id, variant):
+        # TODO: update to lims db and sqlalchemy
+        now = datetime.datetime.utcnow().replace(microsecond=0).isoformat(" ")
+        con = sqlite3.connect(self.titration_sqlite_db_path)
+        cur = con.cursor()
+        cur.execute(
+            """
+            UPDATE
+                titration_task_tracking
+            SET
+                created_at=?
+            WHERE
+                workflow_id=? AND variant=?;
+            """,
+            (now, int(workflow_id), variant)
+        )
+        con.commit()
+        con.close()
+
+    def mark_titration_entry_as_finished(self, workflow_id, variant):
+        # TODO: update to lims db and sqlalchemy
+        now = datetime.datetime.utcnow().replace(microsecond=0).isoformat(" ")
+        con = sqlite3.connect(self.titration_sqlite_db_path)
+        cur = con.cursor()
+        cur.execute(
+            """
+            UPDATE
+                titration_task_tracking
+            SET
+                finished_at=?
+            WHERE
+                workflow_id=? AND variant=?
+            """,
+            (now, int(workflow_id), variant)
+        )
+        con.commit()
+        con.close()

@@ -31,25 +31,46 @@ class BaseTask(celery.Task):
         engine = db.create_engine()
         session = db.create_session(engine)
         database = db.Database(session)
-        # args is always a tuple
-        # for stitching tasks it's a tuple of 1 string
-        #     e.g   ("/camp/ABNEUTRALISATION..../indexfile.txt", )
-        # for analysis tasks it's a tuple of 1 list containing 2 strings
-        #    e.g (["/camp/.../", "/camp/.../"], )
-        assert len(args) == 1
-        if isinstance(args[0], str):
-            task_type = "stitching"
-        elif isinstance(args[0], list) and len(args[0]) == 2:
-            task_type = "analysis"
-        else:
-            raise RuntimeError(f"invalid args: {args}")
+        task_type = self.get_task_type(args)
         if task_type == "analysis":
             workflow_id = self.get_workflow(args)
             variant = self.get_variant(args, database)
             database.mark_analysis_entry_as_finished(workflow_id, variant)
         if task_type == "stitching":
-            plate_name = self.get_plate_name(args)
+            plate_name = self.get_plate_name_stitch(args[0])
             database.mark_stitching_entry_as_finished(plate_name)
+        if task_type == "titration":
+            workflow_id = self.get_workflow(args)
+            variant = self.get_variant(args, database)
+            database.mark_titration_entry_as_finished(workflow_id, variant)
+
+    def get_task_type(self, args):
+        """
+        determine whether task was analysis, stitching, or titration
+        based on the arguments given to it.
+
+         args is always a tuple
+         for stitching tasks it's a tuple of 1 string
+             e.g   ("/camp/ABNEUTRALISATION..../indexfile.txt", )
+         for analysis tasks it's a tuple of 1 list containing 2 strings
+            e.g (["/camp/.../", "/camp/.../"], )
+        """
+        assert len(args) == 1
+        if isinstance(args[0], str):
+            task_type = "stitching"
+        elif isinstance(args[0], list) and len(args[0]) == 2:
+            # determine if analysis or titration task
+            plate_names = [self.get_plate_name(i) for i in args[0]]
+            titration_plate_count = sum(self.is_titration_plate(i) for i in plate_names)
+            if titration_plate_count == 2:
+                task_type = "titration"
+            elif titration_plate_count == 0:
+                task_type = "analysis"
+            else:
+                raise RuntimeError(f"invalid args: {args}")
+        else:
+            raise RuntimeError(f"invalid args: {args}")
+        return task_type
 
     def on_failure(self, exc, task_id, args, kwargs, einfo):
         """send slack alert on task failure"""
@@ -59,14 +80,24 @@ class BaseTask(celery.Task):
             print(f"{status_code}: failed to send slack alert")
 
     @staticmethod
-    def get_plate_name(args):
+    def is_titration_plate(plate_name):
+        """determines if plate name is from a titration plate"""
+        return os.path.basename(plate_name).startswith("T")
+
+    @staticmethod
+    def get_plate_name(path):
+        """get plate name from path"""
+        return os.path.basename(path).split("__")[0]
+
+    @staticmethod
+    def get_plate_name_stitch(args):
         """
         get plate name from image_stitch args
 
         Arguments:
         -----------
-        args: tuple of 1 string
-            e.g ('/.../S06000114__2021-05-14T13_44_30-Measurement 1/indexfile.txt',)
+        args: tuple of length 1
+            e.g ('/.../S06000114__2021-05-14T13_44_30-Measurement 1/indexfile.txt', )
 
         Returns:
         ---------
@@ -140,3 +171,19 @@ def background_image_stitch_384(indexfile_path):
     stitcher.stitch_plate()
     stitcher.stitch_all_samples()
     stitcher.save_all()
+
+
+@celery.task(
+    queue="titration",
+    base=BaseTask,
+    autoretry_for=(
+        ConnectionResetError,
+        FileNotFoundError,
+        BlockingIOError,
+        sqlalchemy.exc.OperationalError,
+    ),
+)
+def back_titration_analysis_384(plate_list):
+    """titration analysis"""
+    time.sleep(10)
+    plaque_assay.main.run_titration(plate_list)
