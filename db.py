@@ -9,7 +9,6 @@ from sqlalchemy import or_
 
 import models
 import utils
-from retry import retry
 
 
 TITRATION_SQLITE_PATH = "titration_task_tracking.db"
@@ -52,7 +51,6 @@ class Database:
     def now():
         return datetime.datetime.utcnow().replace(microsecond=0).isoformat(" ")
 
-    @retry(sqlalchemy.exc.OperationalError)
     def get_variant_from_plate_name(self, plate_name):
         """
         plate_name is os.path.basename(full_path).split("__")[0]
@@ -77,7 +75,6 @@ class Database:
             )
         return result.mutant_strain
 
-    @retry(sqlalchemy.exc.OperationalError)
     def get_variant_ints_from_name(self, variant_name):
         """
         get plate prefix integers from variant name.
@@ -91,7 +88,6 @@ class Database:
         )
         return sorted([int(result.plate_id_1[1:]), int(result.plate_id_2[1:])])
 
-    @retry(sqlalchemy.exc.OperationalError)
     def get_analysis_state(self, workflow_id, variant, titration=False):
         """
         Get the current state of an analysis from the `processed` table.
@@ -180,7 +176,6 @@ class Database:
                     # (will have to update the created_at time)
                     return "stuck"
 
-    @retry(sqlalchemy.exc.OperationalError)
     def get_stitching_state(self, plate_name):
         """docstring"""
         result = (
@@ -199,7 +194,6 @@ class Database:
             is_recent = int(time_difference) < 60*30
             return "recent" if is_recent else "stuck"
 
-    @retry(sqlalchemy.exc.OperationalError)
     def is_plate_stitched(self, plate_name):
         """
         Check if a plate is already stitched.
@@ -217,7 +211,6 @@ class Database:
         )
         return result is not None
 
-    @retry(sqlalchemy.exc.OperationalError)
     def create_analysis_entry(self, workflow_id, variant):
         """
         run on task submission
@@ -233,7 +226,6 @@ class Database:
         self.session.add(analysis)
         self.session.commit()
 
-    @retry(sqlalchemy.exc.OperationalError)
     def _processed_entry_exists(self, workflow_id, variant):
         """check if a row exists for a given workflow_id/variant"""
         result = (
@@ -254,7 +246,6 @@ class Database:
             )
             raise RuntimeError(msg)
 
-    @retry(sqlalchemy.exc.OperationalError)
     def update_analysis_entry(self, workflow_id, variant):
         """
         run on task re-submission after delay
@@ -270,7 +261,6 @@ class Database:
             .update({models.Analysis.created_at: self.now()})
         self.session.commit()
 
-    @retry(sqlalchemy.exc.OperationalError)
     def mark_analysis_entry_as_finished(self, workflow_id, variant):
         """run on task success"""
         self._alert_if_not_exists(workflow_id, variant)
@@ -282,7 +272,6 @@ class Database:
             .update({models.Analysis.finished_at: self.now()})
         self.session.commit()
 
-    @retry(sqlalchemy.exc.OperationalError)
     def update_stitching_entry(self, plate_name):
         self.session\
             .query(models.Stitching)\
@@ -290,7 +279,6 @@ class Database:
             .update({models.Stitching.created_at: self.now()})
         self.session.commit()
 
-    @retry(sqlalchemy.exc.OperationalError)
     def mark_stitching_entry_as_finished(self, plate_name):
         self.session\
             .query(models.Stitching)\
@@ -298,7 +286,6 @@ class Database:
             .update({models.Stitching.finished_at: self.now()})
         self.session.commit()
 
-    @retry(sqlalchemy.exc.OperationalError)
     def create_stitching_entry(self, plate_name):
         """add a plate to the stitched database"""
         stitched_plate = models.Stitching(
