@@ -41,7 +41,7 @@ class BaseTask(celery.Task):
             database.mark_stitching_entry_as_finished(plate_name)
         if task_type == "titration":
             workflow_id = self.get_workflow(args)
-            variant = self.get_variant(args, database)
+            variant = self.get_variant(args, database, titration=True)
             database.mark_titration_entry_as_finished(workflow_id, variant)
 
     def get_task_type(self, args):
@@ -123,18 +123,18 @@ class BaseTask(celery.Task):
         return workflow_single
 
     @staticmethod
-    def get_variant(args, database):
+    def get_variant(args, database, titration=False):
         """get variant letter short-code from args"""
         paths = args[0]
         assert len(paths) == 2
         variant_set = set()
         for path in paths:
             plate_name = os.path.basename(path).split("__")[0]
-            variant = database.get_variant_from_plate_name(plate_name)
+            variant = database.get_variant_from_plate_name(plate_name, titration)
             variant_set.add(variant)
         assert len(variant_set) == 1, "multiple variants detected"
-        variant_letter = list(variant_set)[0]
-        return variant_letter
+        variant_name = list(variant_set)[0]
+        return variant_name
 
 
 @celery.task(
@@ -183,7 +183,7 @@ def background_image_stitch_384(indexfile_path):
         sqlalchemy.exc.OperationalError,
     ),
 )
-def back_titration_analysis_384(plate_list):
+def background_titration_analysis_384(plate_list):
     """titration analysis"""
     time.sleep(10)
     plaque_assay.main.run_titration(plate_list)

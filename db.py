@@ -51,7 +51,7 @@ class Database:
     def now():
         return datetime.datetime.utcnow().replace(microsecond=0).isoformat(" ")
 
-    def get_variant_from_plate_name(self, plate_name):
+    def get_variant_from_plate_name(self, plate_name, titration=False):
         """
         plate_name is os.path.basename(full_path).split("__")[0]
 
@@ -59,6 +59,8 @@ class Database:
         table based on the plate prefix
         """
         plate_prefix = plate_name[:3]
+        if titration:
+            plate_prefix = plate_prefix.replace("T", "S")
         result = (
             self.session.query(models.Variant)
             .filter(
@@ -141,7 +143,12 @@ class Database:
             if db_fetched:  # if not None
                 # convert into namedtuple so we can access created_at and
                 # finished_at as from sqlalchemy
-                result = result_tuple(*db_fetched)
+                created_at, finished_at = db_fetched
+                if created_at is not None:
+                    created_at = datetime.datetime.fromisoformat(created_at)
+                if finished_at is not None:
+                    finished_at = datetime.datetime.fromisoformat(finished_at)
+                result = result_tuple(created_at, finished_at)
             else:
                 result = None
         else:  # is analysis

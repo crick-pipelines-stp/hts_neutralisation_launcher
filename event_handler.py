@@ -39,12 +39,14 @@ class MyEventHandler(LoggingEventHandler):
             # invalid experiment name, skip
             return None
         plate_name = self.get_plate_name(src_path)
-        try:
-            variant = self.database.get_variant_from_plate_name(plate_name)
-        except ValueError as e:
-            logging.error(e)
-            return None
         if self.is_titration_plate(plate_name):
+            try:
+                variant = self.database.get_variant_from_plate_name(
+                    plate_name, titration=True
+                )
+            except ValueError as e:
+                logging.error(e)
+                return None
             logging.info(f"plate: {plate_name} detected as a titration plate")
             # TODO: check we have both replicate plates
             plate_list_titration = self.create_plate_list_384(
@@ -53,6 +55,13 @@ class MyEventHandler(LoggingEventHandler):
             if len(plate_list_titration) == 2:
                 self.handle_titration(plate_list_titration, workflow_id, variant)
             # return as to NOT submit analysis or stitching tasks
+            return None
+        try:
+            variant = self.database.get_variant_from_plate_name(
+                plate_name, titration=False
+            )
+        except ValueError as e:
+            logging.error(e)
             return None
         plate_list_384 = self.create_plate_list_384(workflow_id, variant)
         # check both duplicates have been exported
@@ -180,9 +189,7 @@ class MyEventHandler(LoggingEventHandler):
         --------
         None
         """
-        # TODO: make this
-        raise NotImplementedError("not made this yet!")
-        titration_state = self.database.get_titration_state(workflow_id, variant)
+        titration_state = self.database.get_analysis_state(workflow_id, variant, titration=True)
         if titration_state == "finished":
             logging.info(
                 f"workflow_id: {workflow_id} variant: {variant} has already been analysed"
@@ -213,7 +220,7 @@ class MyEventHandler(LoggingEventHandler):
             message = textwrap.dedent(
                 f"""
                 Invalid titration analysis state ({titration_state}) when checking with
-                `Database.get_titration_state()`.
+                `Database.get_analysis_state(titration=True)`.
                 """
             )
             return_code = utils.send_simple_slack_alert(workflow_id, variant, message)
