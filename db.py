@@ -26,7 +26,8 @@ def create_engine(test=False):
     if None in (user, host, password):
         raise KeyError("db credentials not found in users environment")
     engine = sqlalchemy.create_engine(
-            f"mysql://{user}:{password}@{host}/serology"
+        f"mysql://{user}:{password}@{host}/serology",
+        pool_pre_ping=True
     )
     return engine
 
