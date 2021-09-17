@@ -37,7 +37,7 @@ class BaseTask(celery.Task):
             variant = self.get_variant(args, database)
             database.mark_analysis_entry_as_finished(workflow_id, variant)
         if task_type == "stitching":
-            plate_name = self.get_plate_name_stitch(args[0])
+            plate_name = self.get_plate_name_stitch(args)
             database.mark_stitching_entry_as_finished(plate_name)
         if task_type == "titration":
             workflow_id = self.get_workflow(args)
