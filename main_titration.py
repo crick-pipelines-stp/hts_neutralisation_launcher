@@ -65,7 +65,7 @@ if __name__ == "__main__":
 
     event_handler = MyEventHandler(args.input_dir, args.db_path)
 
-    observer = Observer()
+    observer = Observer(timeout=5)
     observer.schedule(event_handler, args.input_dir, recursive=False)
     observer.start()
 
