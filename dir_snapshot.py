@@ -1,8 +1,33 @@
+"""
+An filesystem monitoring class as an alternative to Watchdog.
+Records the names of directories in a parent directory in a database
+alongside a hash, creating a snapshot. This can then be used to determine
+if new directories have been exported since the last time it has been run.
+This is useful when the CAMP mount is being tempremental.
+
+An example workflow:
+
+    RESULTS_DIR = "/mnt/proj-c19/NA_raw_data"
+    DB_PATH = "snapshot.db"
+
+    snapshot = Snapshot(RESULTS_DIR, DB_PATH)
+    if snapshot.current_dir_hash == snapshot.old_dir_hash:
+        # nothing has changed
+        sys.exit(0)
+
+    # get new directory names
+    new_data = snapshot.get_new_dirs()
+
+    # record new snapshot
+    snapshot.make_snapshot()
+"""
+
+
 import hashlib
 import os
 from glob import glob
 import sqlite3
-from typing import List
+from typing import List, Optional
 
 
 class SnapshotDB:
@@ -30,18 +55,18 @@ class SnapshotDB:
             )
         return con
 
-    def add_dir(self, new_dir):
+    def add_dir(self, new_dir: str):
         """Add directory name to snapshot db"""
         with self.con:
             self.con.execute("INSERT OR IGNORE INTO snapshot(id) VALUES(?)", (new_dir,))
 
-    def rm_dir(self, rm_dir):
+    def rm_dir(self, rm_dir: str):
         """Remove a directory name from the snapshot db"""
         with self.con:
             self.con.execute("DELETE FROM snapshot WHERE id = ?", (rm_dir,))
 
     def is_new_dir(self, dir_name: str) -> bool:
-        """determines if a directory name is in the snapshot db or not"""
+        """determines if a dir is new by checking if it's in the latest snapshot"""
         with self.con:
             for _ in self.con.execute(
                 "SELECT 1 FROM snapshot WHERE id = ?", (dir_name,)
@@ -66,7 +91,7 @@ class SnapshotDB:
                 "INSERT OR IGNORE INTO hash (id, value) VALUES (1, ?)", (hash_val,)
             )
 
-    def get_hash(self) -> str:
+    def get_hash(self) -> Optional[str]:
         """get the hash from the database"""
         cur = self.con.cursor()
         cur.execute("SELECT value FROM hash WHERE id=1")
@@ -101,8 +126,9 @@ class Snapshot:
         """get the dir hash stored in the snapshot db"""
         return self.snapshot_db.get_hash()
 
-    def get_all_dirnames(self):
-        filenames = glob(os.path.join(self.base_dir, f"{self.prefix}*{self.suffix}"))
+    def get_all_dirnames(self) -> List[str]:
+        glob_str = f"{self.prefix}*{self.suffix}"
+        filenames = glob(os.path.join(self.base_dir, glob_str))
         base_filenames = [os.path.basename(i) for i in filenames]
         assert len(base_filenames) > 0
         base_filenames.sort()
