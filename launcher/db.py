@@ -25,8 +25,7 @@ def create_engine(test=False):
     if None in (user, host, password):
         raise KeyError("db credentials not found in users environment")
     engine = sqlalchemy.create_engine(
-        f"mysql://{user}:{password}@{host}/serology",
-        pool_pre_ping=True
+        f"mysql://{user}:{password}@{host}/serology", pool_pre_ping=True
     )
     return engine
 
@@ -72,9 +71,7 @@ class Database:
             .first()
         )
         if result is None:
-            raise ValueError(
-                f"cannot find variant from plate name {plate_name}"
-            )
+            raise ValueError(f"cannot find variant from plate name {plate_name}")
         return result.mutant_strain
 
     def get_variant_ints_from_name(self, variant_name):
@@ -136,7 +133,7 @@ class Database:
                 WHERE
                     workflow_id=? AND variant=?
                 """,
-                (int(workflow_id), variant)
+                (int(workflow_id), variant),
             )
             db_fetched = cur.fetchone()
             con.close()
@@ -174,7 +171,7 @@ class Database:
                 time_now = datetime.datetime.utcnow()
                 time_difference = (time_now - result.created_at).total_seconds()
                 # "recent" defined as within 30 minutes
-                is_recent = int(time_difference) < 60*30
+                is_recent = int(time_difference) < 60 * 30
                 if is_recent:
                     # probably sat in the job-queue, don't re-submit analysis
                     return "recent"
@@ -198,7 +195,7 @@ class Database:
             # see if it's been recently submitted
             time_now = datetime.datetime.utcnow()
             time_difference = (time_now - result.created_at).total_seconds()
-            is_recent = int(time_difference) < 60*30
+            is_recent = int(time_difference) < 60 * 30
             return "recent" if is_recent else "stuck"
 
     def is_plate_stitched(self, plate_name):
@@ -226,9 +223,7 @@ class Database:
         with the current timestamp (default behaviour)
         """
         analysis = models.Analysis(
-            workflow_id=int(workflow_id),
-            variant=variant,
-            created_at=self.now()
+            workflow_id=int(workflow_id), variant=variant, created_at=self.now()
         )
         self.session.add(analysis)
         self.session.commit()
@@ -239,7 +234,7 @@ class Database:
             self.session.query(models.Analysis)
             .filter(
                 models.Analysis.workflow_id == int(workflow_id),
-                models.Analysis.variant == variant
+                models.Analysis.variant == variant,
             )
             .first()
         )
@@ -261,43 +256,39 @@ class Database:
         to current timestamp when relaunching a stuck experiment.
         """
         self._alert_if_not_exists(workflow_id, variant)
-        self.session\
-            .query(models.Analysis)\
-            .filter(models.Analysis.workflow_id == int(workflow_id))\
-            .filter(models.Analysis.variant == variant)\
-            .update({models.Analysis.created_at: self.now()})
+        self.session.query(models.Analysis).filter(
+            models.Analysis.workflow_id == int(workflow_id)
+        ).filter(models.Analysis.variant == variant).update(
+            {models.Analysis.created_at: self.now()}
+        )
         self.session.commit()
 
     def mark_analysis_entry_as_finished(self, workflow_id, variant):
         """run on task success"""
         self._alert_if_not_exists(workflow_id, variant)
         # update `finished_at` value to current timestamp
-        self.session\
-            .query(models.Analysis)\
-            .filter(models.Analysis.workflow_id == int(workflow_id))\
-            .filter(models.Analysis.variant == variant)\
-            .update({models.Analysis.finished_at: self.now()})
+        self.session.query(models.Analysis).filter(
+            models.Analysis.workflow_id == int(workflow_id)
+        ).filter(models.Analysis.variant == variant).update(
+            {models.Analysis.finished_at: self.now()}
+        )
         self.session.commit()
 
     def update_stitching_entry(self, plate_name):
-        self.session\
-            .query(models.Stitching)\
-            .filter(models.Stitching.plate_name == plate_name)\
-            .update({models.Stitching.created_at: self.now()})
+        self.session.query(models.Stitching).filter(
+            models.Stitching.plate_name == plate_name
+        ).update({models.Stitching.created_at: self.now()})
         self.session.commit()
 
     def mark_stitching_entry_as_finished(self, plate_name):
-        self.session\
-            .query(models.Stitching)\
-            .filter(models.Stitching.plate_name == plate_name)\
-            .update({models.Stitching.finished_at: self.now()})
+        self.session.query(models.Stitching).filter(
+            models.Stitching.plate_name == plate_name
+        ).update({models.Stitching.finished_at: self.now()})
         self.session.commit()
 
     def create_stitching_entry(self, plate_name):
         """add a plate to the stitched database"""
-        stitched_plate = models.Stitching(
-            plate_name=plate_name, created_at=self.now()
-        )
+        stitched_plate = models.Stitching(plate_name=plate_name, created_at=self.now())
         self.session.add(stitched_plate)
         self.session.commit()
 
@@ -335,8 +326,7 @@ class Database:
             VALUES
                 (?, ?, ?, ?);
             """,
-            (now, None, variant, int(workflow_id))
-
+            (now, None, variant, int(workflow_id)),
         )
         con.commit()
         con.close()
@@ -355,7 +345,7 @@ class Database:
             WHERE
                 workflow_id=? AND variant=?;
             """,
-            (now, int(workflow_id), variant)
+            (now, int(workflow_id), variant),
         )
         con.commit()
         con.close()
@@ -374,7 +364,7 @@ class Database:
             WHERE
                 workflow_id=? AND variant=?
             """,
-            (now, int(workflow_id), variant)
+            (now, int(workflow_id), variant),
         )
         con.commit()
         con.close()

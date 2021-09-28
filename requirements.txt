@@ -1,6 +1,5 @@
 celery
 redis
-watchdog
 pandas
 numpy
 scikit-image

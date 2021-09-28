@@ -1,43 +1,15 @@
 import os
 import textwrap
 import requests
+import logging
 
 
 SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_NEUTRALISATION")
-HOST_IP="10.28.41.242"
-PORT=5555
+HOST_IP = "10.28.41.242"
+PORT = 5555
 
 
-def is_even(n):
-    return n % 2 == 0
-
-
-def is_odd(n):
-    return n % 2 != 0
-
-
-def well_to_row_col(well):
-    row = ord(well[0].lower()) - 96
-    col = int(well[1:])
-    return row, col
-
-
-def get_dilution_from_row_col(row, col):
-    row, col = int(row), int(col)
-    if is_odd(row) and is_odd(col):
-        dilution = 2560
-    elif is_odd(row) and is_even(col):
-        dilution = 160
-    elif is_even(row) and is_odd(col):
-        dilution = 640
-    elif is_even(row) and is_even(col):
-        dilution = 40
-    else:
-        raise RuntimeError()
-    return dilution
-
-
-def send_slack_alert(exc, task_id, args, kwargs, einfo):
+def send_alert(exc, task_id, args, einfo):
     """send slack message on failure"""
     data = {
         "text": "Something broke",
@@ -50,7 +22,7 @@ def send_slack_alert(exc, task_id, args, kwargs, einfo):
                     *NE pipeline*
                     -------------------------------------
                     {task_id!r} failed
-                    http://{HOST_IP}:{PORT}/task/{task_id!r}
+                    http://{HOST_IP}:{PORT}/task/{task_id}
                     -------------------------------------
                     args: {args!r}
                     -------------------------------------
@@ -65,11 +37,11 @@ def send_slack_alert(exc, task_id, args, kwargs, einfo):
             }
         ],
     }
-    r = requests.post(SLACK_WEBHOOK_URL, json=data)
-    return r.status_code
+    response = requests.post(SLACK_WEBHOOK_URL, json=data)
+    log_response(response)
 
 
-def send_slack_warning(message):
+def send_warning(message):
     """send slack warning message"""
     data = {
         "text": "Something might be wrong",
@@ -89,11 +61,11 @@ def send_slack_warning(message):
             }
         ],
     }
-    r = requests.post(SLACK_WEBHOOK_URL, json=data)
-    return r.status_code
+    response = requests.post(SLACK_WEBHOOK_URL, json=data)
+    log_response(response)
 
 
-def send_simple_slack_alert(workflow_id, variant, message):
+def send_simple_alert(workflow_id, variant, message):
     """send slack message on failure"""
     data = {
         "text": "Something broke",
@@ -120,5 +92,12 @@ def send_simple_slack_alert(workflow_id, variant, message):
             }
         ],
     }
-    r = requests.post(SLACK_WEBHOOK_URL, json=data)
-    return r.status_code
+    response = requests.post(SLACK_WEBHOOK_URL, json=data)
+    log_response(response)
+
+
+def log_response(response):
+    if response.status_code == 200:
+        logging.info("message sent to slack")
+    else:
+        logging.error(f"failed to send slack message, code {response.status_code}")
