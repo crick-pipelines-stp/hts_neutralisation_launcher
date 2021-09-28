@@ -4,6 +4,9 @@ import logging
 from launcher import slack
 
 
+log = logging.getLogger(__name__)
+
+
 def is_even(n):
     return n % 2 == 0
 
@@ -56,7 +59,7 @@ def get_experiment_name(dir_name):
         # 384-well plates should be the same for now
         experiment_name = plate_dir.split("__")[0][-6:]
     else:
-        logging.error(f"invalid plate directory name {plate_dir}, skipping")
+        log.error(f"invalid plate directory name {plate_dir}, skipping")
         # send warning message to slack
         slack.send_warning(
             f"Detected invalid directory name in NA_raw_data: {plate_dir}"

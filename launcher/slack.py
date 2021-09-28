@@ -4,6 +4,9 @@ import requests
 import logging
 
 
+log = logging.getLogger(__name__)
+
+
 SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_NEUTRALISATION")
 HOST_IP = "10.28.41.242"
 PORT = 5555
@@ -98,6 +101,6 @@ def send_simple_alert(workflow_id, variant, message):
 
 def log_response(response):
     if response.status_code == 200:
-        logging.info("message sent to slack")
+        log.info("message sent to slack")
     else:
-        logging.error(f"failed to send slack message, code {response.status_code}")
+        log.error(f"failed to send slack message, code {response.status_code}")
