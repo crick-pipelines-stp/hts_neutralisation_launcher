@@ -1,17 +1,18 @@
 """
 An filesystem monitoring class as an alternative to Watchdog.
+Basically a set using sqlite.
 Records the names of directories in a parent directory in a database
 alongside a hash, creating a snapshot. This can then be used to determine
 if new directories have been exported since the last time it has been run.
-This is useful when the CAMP mount is being tempremental.
+This is useful when the CAMP mount is being temperamental, but requires a
+cron job.
 
 An example workflow:
 
-    RESULTS_DIR = "/mnt/proj-c19/NA_raw_data"
-    DB_PATH = "snapshot.db"
+    results_dir = "/mnt/proj-c19/ABNEUTRALISATION/NA_raw_data"
 
-    snapshot = Snapshot(RESULTS_DIR, DB_PATH)
-    if snapshot.current_dir_hash == snapshot.old_dir_hash:
+    snapshot = Snapshot(results_dir)
+    if snapshot.current_hash == snapshot.stored_hash:
         # nothing has changed
         sys.exit(0)
 
@@ -20,6 +21,9 @@ An example workflow:
 
     # record new snapshot
     snapshot.make_snapshot()
+
+    # do stuff with new_data
+    ...
 """
 
 
@@ -33,12 +37,11 @@ from typing import List, Optional
 class SnapshotDB:
     """An sqlite database which handles dir names and hashes"""
 
-    def __init__(self, db_path):
+    def __init__(self, db_path: str):
         self.db_path = db_path
         self.con = self.create_connection()
 
     def create_connection(self):
-        """create a connection to the snapshot db"""
         con = sqlite3.connect(self.db_path)
         # create db if it doesn't exist
         with con:
@@ -56,17 +59,14 @@ class SnapshotDB:
         return con
 
     def add_dir(self, new_dir: str):
-        """Add directory name to snapshot db"""
         with self.con:
             self.con.execute("INSERT OR IGNORE INTO snapshot(id) VALUES(?)", (new_dir,))
 
     def rm_dir(self, rm_dir: str):
-        """Remove a directory name from the snapshot db"""
         with self.con:
             self.con.execute("DELETE FROM snapshot WHERE id = ?", (rm_dir,))
 
     def is_new_dir(self, dir_name: str) -> bool:
-        """determines if a dir is new by checking if it's in the latest snapshot"""
         with self.con:
             for _ in self.con.execute(
                 "SELECT 1 FROM snapshot WHERE id = ?", (dir_name,)
@@ -75,16 +75,10 @@ class SnapshotDB:
         return True
 
     def create_snapshot(self, dirnames: List[str]):
-        """creates a snapshot from a list of directory names"""
         for dirname in dirnames:
             self.add_dir(dirname)
 
     def add_hash(self, hash_val: str):
-        """
-        Add hash to database.
-        NOTE: It only stores a single value where id=1, so first tries an
-              UPDATE, then an INSERT OR IGNORE, seems to work.
-        """
         with self.con:
             self.con.execute("UPDATE hash SET VALUE=? WHERE id=1", (hash_val,))
             self.con.execute(
@@ -92,7 +86,6 @@ class SnapshotDB:
             )
 
     def get_hash(self) -> Optional[str]:
-        """get the hash from the database"""
         cur = self.con.cursor()
         cur.execute("SELECT value FROM hash WHERE id=1")
         val = cur.fetchone()
@@ -101,51 +94,44 @@ class SnapshotDB:
 
 
 class Snapshot:
-    """
-    Snapshot of the exported data directory. Determines if new directories
-    have been exported to `base_dir`.
-    """
-
     def __init__(
-        self, base_dir: str, snapshot_path: str, prefix="S", suffix="-Measurement 1"
+        self,
+        parent_dir: str,
+        db_path=".snapshot.db",
+        prefix="S",
+        suffix="-Measurement 1",
     ):
-        self.base_dir = base_dir
+        self.parent_dir = parent_dir
         self.prefix = prefix
         self.suffix = suffix
-        self.snapshot_db = SnapshotDB(snapshot_path)
+        self.db = SnapshotDB(db_path)
 
     @property
-    def current_dir_hash(self) -> str:
-        """return a SHA256 hash of the sorted filenames"""
+    def current_hash(self) -> str:
         base_filenames = self.get_all_dirnames()
-        filenames_str = " ".join(base_filenames).encode("utf-8")
-        return hashlib.sha256(filenames_str).hexdigest()
+        filenames_utf8 = " ".join(base_filenames).encode("utf-8")
+        return hashlib.sha256(filenames_utf8).hexdigest()
 
     @property
-    def old_dir_hash(self) -> str:
-        """get the dir hash stored in the snapshot db"""
-        return self.snapshot_db.get_hash()
+    def stored_hash(self) -> str:
+        return self.db.get_hash()
 
     def get_all_dirnames(self) -> List[str]:
         glob_str = f"{self.prefix}*{self.suffix}"
-        filenames = glob(os.path.join(self.base_dir, glob_str))
+        filenames = glob(os.path.join(self.parent_dir, glob_str))
         base_filenames = [os.path.basename(i) for i in filenames]
-        assert len(base_filenames) > 0
-        base_filenames.sort()
-        return base_filenames
+        return sorted(base_filenames)
 
     def make_snapshot(self):
-        """record a snapshot of all the sub-directory names to disk"""
         dirnames = self.get_all_dirnames()
-        self.snapshot_db.create_snapshot(dirnames)
-        self.snapshot_db.add_hash(self.current_dir_hash)
+        self.db.create_snapshot(dirnames)
+        self.db.add_hash(self.current_hash)
 
     def get_new_dirs(self) -> List[str]:
-        """detect new dirs which are not in the latest snapshot"""
         new_dirs = []
         all_dirs = self.get_all_dirnames()
         for dirname in all_dirs:
-            if self.snapshot_db.is_new_dir(dirname):
-                full_dir_path = os.path.join(self.base_dir, dirname)
+            if self.db.is_new_dir(dirname):
+                full_dir_path = os.path.join(self.parent_dir, dirname)
                 new_dirs.append(full_dir_path)
         return new_dirs

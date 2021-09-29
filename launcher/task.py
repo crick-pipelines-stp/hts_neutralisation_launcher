@@ -8,7 +8,7 @@ import celery
 import db
 import plaque_assay
 import stitch_images
-import utils
+import slack
 
 
 REDIS_PORT = 6379
@@ -22,7 +22,6 @@ celery = celery.Celery(
 
 
 class BaseTask(celery.Task):
-
     def on_success(self, retval, task_id, args, kwargs):
         """
         update database to record already-run
@@ -74,10 +73,7 @@ class BaseTask(celery.Task):
 
     def on_failure(self, exc, task_id, args, kwargs, einfo):
         """send slack alert on task failure"""
-        print("sending slack alert")
-        status_code = utils.send_slack_alert(exc, task_id, args, kwargs, einfo)
-        if status_code != 200:
-            print(f"{status_code}: failed to send slack alert")
+        slack.send_alert(exc, task_id, args, kwargs, einfo)
 
     @staticmethod
     def is_titration_plate(plate_name):

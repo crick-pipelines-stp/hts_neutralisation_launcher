@@ -1,8 +1,6 @@
 import os
-import json
 from collections import defaultdict
 import itertools
-from urllib.error import HTTPError
 
 import numpy as np
 import pandas as pd
@@ -15,18 +13,20 @@ from well_dict import well_dict as WELL_DICT
 
 
 # first phenix
-HARMONY_1_NAME="1400l18172"
-HARMONY_1_IP_ADDRESS="10.6.58.52"
+HARMONY_1_NAME = "1400l18172"
+HARMONY_1_IP_ADDRESS = "10.6.58.52"
 # second phenix
-HARMONY_2_NAME="2400l21087"
-HARMONY_2_IP_ADDRESS="10.6.48.135"
+HARMONY_2_NAME = "2400l21087"
+HARMONY_2_IP_ADDRESS = "10.6.48.135"
 
 
 class ImageStitcher:
     """docstring"""
 
     def __init__(
-        self, indexfile_path, output_dir="/mnt/proj-c19/ABNEUTRALISATION/stitched_images"
+        self,
+        indexfile_path,
+        output_dir="/mnt/proj-c19/ABNEUTRALISATION/stitched_images",
     ):
         self.placeholder_url = "/mnt/proj-c19/ABNEUTRALISATION/placeholder_image.png"
         self.indexfile_path = indexfile_path
@@ -36,7 +36,7 @@ class ImageStitcher:
         self.well_dict = WELL_DICT
         self.plate_images = None
         self.dilution_images = None
-        self.ch1_max = 800 # DAPI
+        self.ch1_max = 800  # DAPI
         self.ch2_max = 1000  # virus
 
     def fix_missing_wells(self, indexfile):
@@ -52,7 +52,9 @@ class ImageStitcher:
         rows, cols = zip(*itertools.product(range(1, 17), range(1, 25)))
         temp_df_1 = pd.DataFrame({"Row": rows, "Column": cols, "Channel ID": 1})
         temp_df_2 = pd.DataFrame({"Row": rows, "Column": cols, "Channel ID": 2})
-        temp_df = pd.concat([temp_df_1, temp_df_2]).sort_values(["Row", "Column", "Channel ID"])
+        temp_df = pd.concat([temp_df_1, temp_df_2]).sort_values(
+            ["Row", "Column", "Channel ID"]
+        )
         merged = indexfile.merge(temp_df, how="outer")
         assert merged.shape[0] == n_expected_rows
         # replace missing URLs with the placeholder URL

@@ -10,7 +10,7 @@ class utcnow(expression.FunctionElement):
     type = DateTime()
 
 
-@compiles(utcnow, 'mysql')
+@compiles(utcnow, "mysql")
 def utc_now(element, compiler, **kw):
     return "UTC_TIMESTAMP()"
 
