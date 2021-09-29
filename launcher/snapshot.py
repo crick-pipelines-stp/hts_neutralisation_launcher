@@ -95,7 +95,11 @@ class SnapshotDB:
 
 class Snapshot:
     def __init__(
-        self, parent_dir: str, db_path=".snapshot.db", prefix="S", suffix="-Measurement 1"
+        self,
+        parent_dir: str,
+        db_path=".snapshot.db",
+        prefix="S",
+        suffix="-Measurement 1",
     ):
         self.parent_dir = parent_dir
         self.prefix = prefix

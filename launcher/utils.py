@@ -1,7 +1,7 @@
 import os
 import logging
 
-from launcher import slack
+import slack
 
 
 log = logging.getLogger(__name__)
