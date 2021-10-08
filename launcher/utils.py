@@ -47,7 +47,7 @@ def is_titration_plate(plate_name):
 def is_384_well_plate(dir_name, workflow_id):
     basename = os.path.basename(dir_name)
     parsed_workflow = basename.split("__")[0][-6:]
-    return basename.startswith("S") and parsed_workflow == workflow_id
+    return basename.startswith(("S", "T")) and parsed_workflow == workflow_id
 
 
 def get_experiment_name(dir_name):

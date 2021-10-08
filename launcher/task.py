@@ -170,6 +170,25 @@ def background_image_stitch_384(indexfile_path):
 
 
 @celery.task(
+    queue="image_stitch_titration",
+    base=BaseTask,
+    autoretry_for=(
+        ConnectionResetError,
+        FileNotFoundError,
+        URLError,
+        HTTPError,
+        BlockingIOError,
+    ),
+)
+def background_image_stitch_titration_384(indexfile_path):
+    """image stitching for 384 well plate"""
+    time.sleep(10)
+    stitcher = stitch_images.ImageStitcher(indexfile_path)
+    stitcher.stitch_plate()
+    stitcher.save_plates()
+
+
+@celery.task(
     queue="titration",
     base=BaseTask,
     autoretry_for=(
@@ -182,4 +201,4 @@ def background_image_stitch_384(indexfile_path):
 def background_titration_analysis_384(plate_list):
     """titration analysis"""
     time.sleep(10)
-    plaque_assay.main.run_titration(plate_list)
+    plaque_assay.titration_main.run(plate_list)

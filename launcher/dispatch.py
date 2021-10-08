@@ -22,21 +22,23 @@ SNAPSHOT_DB = "/home/warchas/launcher/.snapshot.db"
 
 
 class Dispatcher:
-    def __init__(self, results_dir=RESULTS_DIR):
+    def __init__(self, results_dir=RESULTS_DIR, db_path=SNAPSHOT_DB, titration=False):
         self.results_dir = results_dir
+        self.db_path = db_path
         engine = db.create_engine()
         session = db.create_session(engine)
+        self.prefix = "T" if titration else "S"
         self.database = db.Database(session)
 
     def get_new_directories(self) -> List[str]:
-        snapshot = Snapshot(self.results_dir, db_path=SNAPSHOT_DB)
+        snapshot = Snapshot(self.results_dir, self.db_path, prefix=self.prefix)
         if snapshot.current_hash == snapshot.stored_hash:
-            log.info("hash of NA_raw_data remains unchanged, exiting...")
+            log.info(f"hash of {self.results_dir} contents remains unchanged, exiting...")
             sys.exit(0)
         new_data = snapshot.get_new_dirs()
         if len(new_data) == 0:
             log.info(
-                "NA_raw_data has changed, but no new valid directories found, exiting..."
+                f"{self.results_dir} has changed, but no new valid directories found, exiting..."
             )
             snapshot.make_snapshot()
             sys.exit(0)
@@ -51,8 +53,9 @@ class Dispatcher:
         wanted_workflows = []
         for i in full_paths:
             final_path = os.path.basename(i)
+            plate_name = utils.get_plate_name(final_path)
             if (
-                final_path[3:9] == workflow_id
+                plate_name[-6:] == workflow_id
                 and final_path[0] == prefix_char
                 and int(final_path[1:3]) in variant_ints
             ):
@@ -69,11 +72,12 @@ class Dispatcher:
         plate_list = self.create_plate_list(
             workflow_id, variant, titration=is_titration
         )
+        log.info(f"plate_list = {plate_list}")
         if len(plate_list) != 2:
             log.info("waiting for 2nd replicate plate, exiting...")
             return None
         self.handle_analysis(plate_list, workflow_id, variant, titration=is_titration)
-        self.handle_stitching(plate_path, workflow_id, plate_name)
+        self.handle_stitching(plate_path, workflow_id, plate_name, is_titration)
 
     def handle_analysis(
         self, plate_list: List[str], workflow_id: str, variant: str, titration=False
@@ -142,7 +146,7 @@ class Dispatcher:
             )
             slack.send_simple_alert(workflow_id, variant, message)
 
-    def handle_stitching(self, plate_path: str, workflow_id: str, plate_name: str):
+    def handle_stitching(self, plate_path: str, workflow_id: str, plate_name: str, is_titration: bool):
         if not utils.is_384_well_plate(plate_path, workflow_id):
             log.warning("not a 384 plate, skipping stitching")
             return None
@@ -161,13 +165,19 @@ class Dispatcher:
             )
             self.database.update_stitching_entry(plate_name)
             indexfile_path = os.path.join(plate_path, "indexfile.txt")
-            task.background_image_stitch_384.delay(indexfile_path)
+            if is_titration:
+                task.background_image_stitch_titration_384.delay(indexfile_path)
+            else:
+                task.background_image_stitch_384.delay(indexfile_path)
             log.info(f"stitching launched for plate: {plate_name}")
         elif stitching_state == "does not exist":
             # create new entry and submit to job queue
             self.database.create_stitching_entry(plate_name)
             indexfile_path = os.path.join(plate_path, "indexfile.txt")
-            task.background_image_stitch_384.delay(indexfile_path)
+            if is_titration:
+                task.background_image_stitch_titration_384.delay(indexfile_path)
+            else:
+                task.background_image_stitch_384.delay(indexfile_path)
             log.info(f"stitching launched for plate: {plate_name}")
         else:
             log.error(f"invalid stitching state {stitching_state}, sending slack alert")

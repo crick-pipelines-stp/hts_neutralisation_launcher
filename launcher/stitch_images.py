@@ -164,6 +164,16 @@ class ImageStitcher:
             dilution_images[well] = sample_img
         self.dilution_images = dilution_images
 
+    def save_plates(self):
+        self.create_output_dir()
+        if self.plate_images is None:
+            raise RuntimeError("no plate images, have you run stitch_plate()?")
+        # TODO: add logging
+        for channel_num, plate_arr in self.plate_images.items():
+            plate_path = os.path.join(self.output_dir_path, f"plate_{channel_num}.png")
+            plate_arr = skimage.img_as_ubyte(plate_arr)
+            skimage.io.imsave(fname=plate_path, arr=plate_arr)
+
     def save_all(self):
         self.create_output_dir()
         if self.dilution_images is None:
