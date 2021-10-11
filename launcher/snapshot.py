@@ -29,8 +29,8 @@ An example workflow:
 
 import hashlib
 import os
-from glob import glob
 import sqlite3
+import re
 from typing import List, Optional
 
 
@@ -102,12 +102,10 @@ class Snapshot:
         self,
         parent_dir: str,
         db_path=".snapshot.db",
-        prefix="S",
-        suffix="-Measurement 1",
+        regex=r"^[S|T].*/*Measurement 1$"
     ):
         self.parent_dir = parent_dir
-        self.prefix = prefix
-        self.suffix = suffix
+        self.regex = re.compile(regex) if regex else None
         self.db = SnapshotDB(db_path)
 
     @property
@@ -121,8 +119,9 @@ class Snapshot:
         return self.db.get_hash()
 
     def get_all_dirnames(self) -> List[str]:
-        glob_str = f"{self.prefix}*{self.suffix}"
-        filenames = glob(os.path.join(self.parent_dir, glob_str))
+        filenames = os.listdir(self.parent_dir)
+        if self.regex:
+            filenames = list(filter(self.regex.search, filenames))
         base_filenames = [os.path.basename(i) for i in filenames]
         return sorted(base_filenames)
 
