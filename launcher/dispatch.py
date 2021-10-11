@@ -27,11 +27,12 @@ class Dispatcher:
         self.db_path = db_path
         engine = db.create_engine()
         session = db.create_session(engine)
-        self.prefix = "T" if titration else "S"
+        prefix = "T" if titration else "S"
+        self.regex_filter = rf"^{prefix}.*/*Measurement 1$"
         self.database = db.Database(session)
 
     def get_new_directories(self) -> List[str]:
-        snapshot = Snapshot(self.results_dir, self.db_path, prefix=self.prefix)
+        snapshot = Snapshot(self.results_dir, self.db_path, regex=self.regex_filter)
         if snapshot.current_hash == snapshot.stored_hash:
             log.info(f"hash of {self.results_dir} contents remains unchanged, exiting...")
             sys.exit(0)
