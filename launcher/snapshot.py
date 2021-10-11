@@ -74,6 +74,10 @@ class SnapshotDB:
                 return False
         return True
 
+    def drop_snapshot(self):
+        with self.con:
+            self.con.execute("DELETE FROM snapshot")
+
     def create_snapshot(self, dirnames: List[str]):
         for dirname in dirnames:
             self.add_dir(dirname)
@@ -122,8 +126,10 @@ class Snapshot:
         base_filenames = [os.path.basename(i) for i in filenames]
         return sorted(base_filenames)
 
-    def make_snapshot(self):
+    def make_snapshot(self, fresh=True):
         dirnames = self.get_all_dirnames()
+        if fresh:
+            self.db.drop_snapshot()
         self.db.create_snapshot(dirnames)
         self.db.add_hash(self.current_hash)
 
