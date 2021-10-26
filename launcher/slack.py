@@ -12,7 +12,7 @@ HOST_IP = "10.28.41.242"
 PORT = 5555
 
 
-def send_alert(exc, task_id, args, einfo):
+def send_alert(exc, task_id, args, kwargs, einfo):
     """send slack message on failure"""
     data = {
         "text": "Something broke",

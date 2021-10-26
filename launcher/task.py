@@ -73,7 +73,7 @@ class BaseTask(celery.Task):
 
     def on_failure(self, exc, task_id, args, kwargs, einfo):
         """send slack alert on task failure"""
-        slack.send_alert(exc, task_id, args, einfo)
+        slack.send_alert(exc, task_id, args, kwargs, einfo)
 
     @staticmethod
     def is_titration_plate(plate_name):
