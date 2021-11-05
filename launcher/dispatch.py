@@ -28,7 +28,7 @@ class Dispatcher:
         engine = db.create_engine()
         session = db.create_session(engine)
         prefix = "T" if titration else "S"
-        self.regex_filter = rf"^{prefix}.*/*Measurement 1$"
+        self.regex_filter = rf"^{prefix}.*/*Measurement [0-9]$"
         self.database = db.Database(session)
 
     def get_new_directories(self) -> List[str]:
