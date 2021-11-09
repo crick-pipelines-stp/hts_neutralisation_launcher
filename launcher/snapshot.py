@@ -102,7 +102,7 @@ class Snapshot:
         self,
         parent_dir: str,
         db_path=".snapshot.db",
-        regex=r"^[S|T].*/*Measurement 1$"
+        regex=r"^[S|T].*/*Measurement [0-9]$"
     ):
         self.parent_dir = parent_dir
         self.regex = re.compile(regex) if regex else None
