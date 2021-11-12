@@ -62,6 +62,11 @@ class SnapshotDB:
         with self.con:
             self.con.execute("INSERT OR IGNORE INTO snapshot(id) VALUES(?)", (new_dir,))
 
+    def add_dirs(self, dirnames: List[str]):
+        rows = [(i,) for i in dirnames]
+        with self.con:
+            self.con.executemany("INSERT OR IGNORE INTO snapshot(id) VALUES(?)", rows)
+
     def rm_dir(self, rm_dir: str):
         with self.con:
             self.con.execute("DELETE FROM snapshot WHERE id = ?", (rm_dir,))
@@ -79,8 +84,7 @@ class SnapshotDB:
             self.con.execute("DELETE FROM snapshot")
 
     def create_snapshot(self, dirnames: List[str]):
-        for dirname in dirnames:
-            self.add_dir(dirname)
+        self.add_dirs(dirnames)
 
     def add_hash(self, hash_val: str):
         with self.con:
