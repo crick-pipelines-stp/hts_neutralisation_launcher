@@ -12,12 +12,15 @@ import utils
 from well_dict import well_dict as WELL_DICT
 
 
-# first phenix
+
 HARMONY_1_NAME = "1400l18172"
 HARMONY_1_IP_ADDRESS = "10.6.58.52"
-# second phenix
+
 HARMONY_2_NAME = "2400l21087"
 HARMONY_2_IP_ADDRESS = "10.6.48.135"
+
+HARMONY_3_NAME = "5krrqd3"
+HARMONY_3_IP_ADDRESS = "10.6.58.91"
 
 
 class ImageStitcher:
@@ -68,10 +71,13 @@ class ImageStitcher:
         vm doesn't find harmony computer by name, replace with ip
         address in URLs
         """
+        # FIXME: just pass a dictionary to pandas replace/rename method
         if url.startswith(f"http://{HARMONY_1_NAME}/"):
             url = url.replace(HARMONY_1_NAME, HARMONY_1_IP_ADDRESS)
         if url.startswith(f"http://{HARMONY_2_NAME}/"):
             url = url.replace(HARMONY_2_NAME, HARMONY_2_IP_ADDRESS)
+        if url.startswith(f"http://{HARMONY_3_NAME}/"):
+            url = url.replace(HARMONY_3_NAME, HARMONY_3_IP_ADDRESS)
         return url
 
     def stitch_plate(self, well_size=(80, 80)):
