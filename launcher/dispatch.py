@@ -188,4 +188,4 @@ class Dispatcher:
                 `Database.get_stitching_state()`.
                 """
             )
-            slack.send_simple_warning(message)
+            slack.send_warning(message)
