@@ -41,3 +41,12 @@ class Variant(Base):
     mutant_strain = sql.Column(sql.String(45))
     plate_id_1 = sql.Column(sql.String(5))
     plate_id_2 = sql.Column(sql.String(5))
+
+
+class Titration(Base):
+    __tablename__ = "NE_task_tracking_analysis_titration"
+    id = sql.Column(sql.Integer, primary_key=True)
+    workflow_id = sql.Column(sql.Integer, nullable=False)
+    variant = sql.Column(sql.String(45), nullable=False)
+    created_at = sql.Column(sql.TIMESTAMP, default=utcnow(), nullable=False)
+    finished_at = sql.Column(sql.TIMESTAMP)
