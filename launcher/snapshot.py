@@ -119,7 +119,7 @@ class Snapshot:
         return hashlib.sha256(filenames_utf8).hexdigest()
 
     @property
-    def stored_hash(self) -> str:
+    def stored_hash(self) -> Optional[str]:
         return self.db.get_hash()
 
     def get_all_dirnames(self) -> List[str]:

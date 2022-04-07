@@ -12,35 +12,41 @@ import utils
 from well_dict import well_dict as WELL_DICT
 
 
-
-HARMONY_1_NAME = "1400l18172"
-HARMONY_1_IP_ADDRESS = "10.6.58.52"
-
-HARMONY_2_NAME = "2400l21087"
-HARMONY_2_IP_ADDRESS = "10.6.48.135"
-
-HARMONY_3_NAME = "5krrqd3"
-HARMONY_3_IP_ADDRESS = "10.6.58.91"
+OUTPUT_DIR = "/mnt/proj-c19/ABNEUTRALISATION/stitched_images"
+# image used for missing wells
+MISSING_WELL_IMG = "/mnt/proj-c19/ABNEUTRALISATION/placeholder_image.png"
+# often run into DNS problems when we can't find the harmony computer by name,
+# so this is a map of name: ip_address
+HARMONY_NAME_IP_MAP = {
+    "1400l18172": "10.6.58.52",
+    "2400l21087": "10.6.48.135",
+    "5krrqd3": "10.6.58.91",
+}
+CHANNELS = (1, 2)
+DILUTIONS = (40, 160, 640, 2560)
+# intensity clipping values, decrease this to increase brightness of images
+MAX_INTENSITY_DAPI = 800
+MAX_INTENSITY_ALEXA488 = 1000
+# image size per well for sample images (pixels)
+IMG_SIZE_SAMPLE = (360, 360)
+# image size per well for plate images (pixels)
+IMG_SIZE_PLATE_WELL = (80, 80)
 
 
 class ImageStitcher:
     """docstring"""
 
-    def __init__(
-        self,
-        indexfile_path,
-        output_dir="/mnt/proj-c19/ABNEUTRALISATION/stitched_images",
-    ):
-        self.placeholder_url = "/mnt/proj-c19/ABNEUTRALISATION/placeholder_image.png"
+    def __init__(self, indexfile_path, output_dir=OUTPUT_DIR):
+        self.placeholder_url = MISSING_WELL_IMG
         self.indexfile_path = indexfile_path
-        self.indexfile = pd.read_csv(indexfile_path, sep="\t")
-        self.indexfile = self.fix_missing_wells(self.indexfile)
+        indexfile = pd.read_csv(indexfile_path, sep="\t")
+        self.indexfile = self.fix_indexfile(indexfile)
         self.output_dir = output_dir
         self.well_dict = WELL_DICT
         self.plate_images = None
         self.dilution_images = None
-        self.ch1_max = 800  # DAPI
-        self.ch2_max = 1000  # virus
+        self.ch1_max = MAX_INTENSITY_DAPI
+        self.ch2_max = MAX_INTENSITY_ALEXA488
 
     def fix_missing_wells(self, indexfile):
         """
@@ -66,29 +72,25 @@ class ImageStitcher:
         return merged
 
     @staticmethod
-    def fix_url(url):
-        """
-        vm doesn't find harmony computer by name, replace with ip
-        address in URLs
-        """
-        # FIXME: just pass a dictionary to pandas replace/rename method
-        if url.startswith(f"http://{HARMONY_1_NAME}/"):
-            url = url.replace(HARMONY_1_NAME, HARMONY_1_IP_ADDRESS)
-        if url.startswith(f"http://{HARMONY_2_NAME}/"):
-            url = url.replace(HARMONY_2_NAME, HARMONY_2_IP_ADDRESS)
-        if url.startswith(f"http://{HARMONY_3_NAME}/"):
-            url = url.replace(HARMONY_3_NAME, HARMONY_3_IP_ADDRESS)
-        return url
+    def fix_urls(df: pd.DataFrame) -> pd.DataFrame:
+        # not a regex, but needed for pandas substring replacement
+        return df.URL.replace(HARMONY_NAME_IP_MAP, regex=True)
 
-    def stitch_plate(self, well_size=(80, 80)):
-        """docstring"""
+    def fix_indexfile(self, indexfile: pd.DataFrame) -> pd.DataFrame:
+        """
+        replace missing wells with placeholder image, and replace
+        computer names with ip addresses
+        """
+        return self.fix_urls(self.fix_missing_wells(indexfile))
+
+    def stitch_plate(self, well_size=IMG_SIZE_PLATE_WELL):
+        """stitch well images into a plate montage"""
         ch_images = {1: [], 2: []}
         plate_images = dict()
         for channel_name, group in self.indexfile.groupby("Channel ID"):
-            for index, row in group.iterrows():
-                url = self.fix_url(row["URL"])
+            for _, row in group.iterrows():
+                url = row["URL"]
                 img = skimage.io.imread(url, as_gray=True)
-                # TODO add logging
                 img = skimage.transform.resize(
                     img, well_size, anti_aliasing=True, preserve_range=True
                 )
@@ -111,12 +113,11 @@ class ImageStitcher:
                 grid_shape=(16, 24),
                 rescale_intensity=False,
             )
-            # TODO rescale to some constant value
             plate_images[channel_name] = img_montage
         self.plate_images = plate_images
 
-    def stitch_sample(self, well, img_size=(360, 360)):
-        """docstring"""
+    def stitch_sample(self, well, img_size=IMG_SIZE_SAMPLE):
+        """stitch individual sample"""
         df = self.indexfile.copy()
         sample_dict = defaultdict(dict)
         images = []
@@ -133,11 +134,11 @@ class ImageStitcher:
                     dilution = utils.get_dilution_from_row_col(
                         group_row["Row"], group_row["Column"]
                     )
-                    url = self.fix_url(group_row["URL"])
+                    url = group_row["URL"]
                     img = skimage.io.imread(url, as_gray=True)
                     sample_dict[channel_name].update({dilution: img})
-        for channel in [1, 2]:
-            for dilution in [40, 160, 640, 2560]:
+        for channel in CHANNELS:
+            for dilution in DILUTIONS:
                 img = sample_dict[channel][dilution]
                 img = skimage.transform.resize(
                     img, img_size, anti_aliasing=True, preserve_range=True
@@ -161,44 +162,42 @@ class ImageStitcher:
         )
         return img_montage
 
-    def stitch_all_samples(self, img_size=(360, 360)):
-        """docstring"""
+    def stitch_all_samples(self, img_size=IMG_SIZE_SAMPLE):
+        """stitch but don't save sample images"""
         dilution_images = {}
         for well in self.well_dict.keys():
-            # TODO: add logging
             sample_img = self.stitch_sample(well, img_size)
             dilution_images[well] = sample_img
         self.dilution_images = dilution_images
 
     def save_plates(self):
+        """save stitched plates"""
         self.create_output_dir()
         if self.plate_images is None:
             raise RuntimeError("no plate images, have you run stitch_plate()?")
-        # TODO: add logging
         for channel_num, plate_arr in self.plate_images.items():
             plate_path = os.path.join(self.output_dir_path, f"plate_{channel_num}.png")
             plate_arr = skimage.img_as_ubyte(plate_arr)
             skimage.io.imsave(fname=plate_path, arr=plate_arr)
 
     def save_all(self):
+        """save both stitched plate and sample images"""
         self.create_output_dir()
         if self.dilution_images is None:
             raise RuntimeError("no dilution images, have you run stitch_all_samples()?")
         if self.plate_images is None:
             raise RuntimeError("no plate images, have you run stitch_plate()?")
-        # TODO: add logging
         for channel_num, plate_arr in self.plate_images.items():
             plate_path = os.path.join(self.output_dir_path, f"plate_{channel_num}.png")
             plate_arr = skimage.img_as_ubyte(plate_arr)
             skimage.io.imsave(fname=plate_path, arr=plate_arr)
         for well_name, well_arr in self.dilution_images.items():
             well_path = os.path.join(self.output_dir_path, f"well_{well_name}.png")
-            # TODO: add logging
             well_arr = skimage.img_as_ubyte(well_arr)
             skimage.io.imsave(fname=well_path, arr=well_arr)
 
     def create_output_dir(self):
-        """docstring"""
+        """create output directory if it doesn't already exist"""
         plate_barcode = self.get_plate_barcode()
         output_dir_path = os.path.join(self.output_dir, plate_barcode)
         os.makedirs(output_dir_path, exist_ok=True)

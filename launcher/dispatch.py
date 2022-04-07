@@ -27,14 +27,16 @@ class Dispatcher:
         self.db_path = db_path
         engine = db.create_engine()
         session = db.create_session(engine)
-        prefix = "T" if titration else "S"
-        self.regex_filter = rf"^{prefix}.*/*Measurement [0-9]$"
+        self.prefix_char = "T" if titration else "S"
+        self.regex_filter = rf"^{self.prefix_char}.*/*Measurement [0-9]$"
         self.database = db.Database(session)
 
     def get_new_directories(self) -> List[str]:
         snapshot = Snapshot(self.results_dir, self.db_path, regex=self.regex_filter)
         if snapshot.current_hash == snapshot.stored_hash:
-            log.info(f"hash of {self.results_dir} contents remains unchanged, exiting...")
+            log.info(
+                f"hash of {self.results_dir} contents remains unchanged, exiting..."
+            )
             sys.exit(0)
         new_data = snapshot.get_new_dirs()
         if len(new_data) == 0:
@@ -46,8 +48,7 @@ class Dispatcher:
         snapshot.make_snapshot()
         return new_data
 
-    def create_plate_list(self, workflow_id, variant, titration=False):
-        prefix_char = "T" if titration else "S"
+    def create_plate_list(self, workflow_id, variant):
         all_subdirs = [i for i in os.listdir(self.results_dir)]
         full_paths = [os.path.join(self.results_dir, i) for i in all_subdirs]
         variant_ints = self.database.get_variant_ints_from_name(variant)
@@ -57,7 +58,7 @@ class Dispatcher:
             plate_name = utils.get_plate_name(final_path)
             if (
                 plate_name[-6:] == workflow_id
-                and final_path[0] == prefix_char
+                and final_path[0] == self.prefix_char
                 and int(final_path[1:3]) in variant_ints
             ):
                 wanted_workflows.append(i)
@@ -65,20 +66,18 @@ class Dispatcher:
 
     def dispatch_plate(self, plate_path: str):
         plate_name = utils.get_plate_name(plate_path)
+        workflow_id = utils.get_workflow_id(plate_name)
         is_titration = utils.is_titration_plate(plate_name)
         variant = self.database.get_variant_from_plate_name(
             plate_name, titration=is_titration
         )
-        workflow_id = utils.get_workflow_id(plate_name)
-        plate_list = self.create_plate_list(
-            workflow_id, variant, titration=is_titration
-        )
-        log.info(f"plate_list = {plate_list}")
-        if len(plate_list) != 2:
-            log.info("waiting for 2nd replicate plate, exiting...")
-            return None
-        self.handle_analysis(plate_list, workflow_id, variant, titration=is_titration)
         self.handle_stitching(plate_path, workflow_id, plate_name, is_titration)
+        plate_list = self.create_plate_list(workflow_id, variant)
+        log.info(f"plate_list = {plate_list}")
+        if len(plate_list) == 2:
+            self.handle_analysis(
+                plate_list, workflow_id, variant, titration=is_titration
+            )
 
     def handle_analysis(
         self, plate_list: List[str], workflow_id: str, variant: str, titration=False
@@ -102,12 +101,10 @@ class Dispatcher:
             log.info(
                 f"workflow_id: {workflow_id} variant: {variant} has already been analysed"
             )
-            return None
         elif analysis_state == "recent":
             log.info(
                 f"workflow_id: {workflow_id} variant: {variant} has recently been added to the job queue, skipping..."
             )
-            return None
         elif analysis_state == "stuck":
             # reset create_at timestamp and resubmit to job queue
             log.info(
@@ -147,7 +144,9 @@ class Dispatcher:
             )
             slack.send_simple_alert(workflow_id, variant, message)
 
-    def handle_stitching(self, plate_path: str, workflow_id: str, plate_name: str, is_titration: bool):
+    def handle_stitching(
+        self, plate_path: str, workflow_id: str, plate_name: str, is_titration: bool
+    ):
         if not utils.is_384_well_plate(plate_path, workflow_id):
             log.warning("not a 384 plate, skipping stitching")
             return None

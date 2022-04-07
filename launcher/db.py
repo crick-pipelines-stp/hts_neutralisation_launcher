@@ -8,7 +8,7 @@ import sqlalchemy.exc
 from sqlalchemy import or_
 
 import models
-import utils
+import slack
 
 
 TITRATION_SQLITE_PATH = "titration_task_tracking.db"
@@ -243,7 +243,7 @@ class Database:
     def _alert_if_not_exists(self, workflow_id, variant):
         if not self._processed_entry_exists(workflow_id, variant):
             msg = f"no entry found for {workflow_id} {variant} in processed table, cannot update"
-            utils.send_simple_slack_alert(
+            slack.send_simple_alert(
                 workflow_id=workflow_id, variant=variant, message=msg
             )
             raise RuntimeError(msg)
