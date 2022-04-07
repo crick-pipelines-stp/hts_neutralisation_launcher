@@ -278,6 +278,6 @@ class Database:
     def mark_titration_entry_as_finished(self, workflow_id, variant):
         self.session.query(models.Titration).filter(
             models.Titration.workflow_id == int(workflow_id),
-            models.Stitching.variant == variant,
-        ).update({models.Stitching.finished_at: self.now()})
+            models.Titration.variant == variant,
+        ).update({models.Titration.finished_at: self.now()})
         self.session.commit()
