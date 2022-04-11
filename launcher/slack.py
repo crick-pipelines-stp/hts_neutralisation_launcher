@@ -3,13 +3,21 @@ import textwrap
 import requests
 import logging
 
+from config import parse_config
+
 
 log = logging.getLogger(__name__)
+config = parse_config()
+HOST_IP = config["default"]["host_ip"]
+PORT = config["celery"]["flower_port"]
 
 
 SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_NEUTRALISATION")
-HOST_IP = "10.28.41.242"
-PORT = 5555
+if not SLACK_WEBHOOK_URL:
+    raise EnvironmentError(
+        "'SLACK_WEBHOOK_NEUTRALISATION' environment variable not found.",
+        "A slack webhook url is required to send error notifications.",
+    )
 
 
 def send_alert(exc, task_id, args, kwargs, einfo):

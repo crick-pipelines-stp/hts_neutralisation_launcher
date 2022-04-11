@@ -13,12 +13,15 @@ from snapshot import Snapshot
 import utils
 import slack
 import task
+from config import parse_config
+
 
 log = logging.getLogger(__name__)
+config = parse_config()
 
 
-RESULTS_DIR = "/mnt/proj-c19/ABNEUTRALISATION/NA_raw_data"
-SNAPSHOT_DB = "/home/warchas/launcher/.snapshot.db"
+RESULTS_DIR = config["analysis"]["results_dir"]
+SNAPSHOT_DB = config["analysis"]["snapshot_db"]
 
 
 class Dispatcher:
@@ -53,16 +56,19 @@ class Dispatcher:
         full_paths = [os.path.join(self.results_dir, i) for i in all_subdirs]
         variant_ints = self.database.get_variant_ints_from_name(variant)
         wanted_workflows = []
-        for i in full_paths:
-            final_path = os.path.basename(i)
-            plate_name = utils.get_plate_name(final_path)
-            if (
-                plate_name[-6:] == workflow_id
-                and final_path[0] == self.prefix_char
-                and int(final_path[1:3]) in variant_ints
-            ):
-                wanted_workflows.append(i)
+        for path in full_paths:
+            if self.is_matching_plate(path, workflow_id, variant_ints):
+                wanted_workflows.append(path)
         return wanted_workflows
+
+    def is_matching_plate(self, path: str, workflow_id: int, variants: List[int]) -> bool:
+        final_path = os.path.basename(path)
+        plate_name = utils.get_plate_name(final_path)
+        return (
+            plate_name[-6:] == workflow_id
+            and final_path[0] == self.prefix_char
+            and int(final_path[1:3]) in variants
+        )
 
     def dispatch_plate(self, plate_path: str):
         plate_name = utils.get_plate_name(plate_path)

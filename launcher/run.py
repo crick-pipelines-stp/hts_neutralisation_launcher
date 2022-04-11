@@ -1,8 +1,6 @@
 import logging
 from dispatch import Dispatcher
-
-
-LOGNAME = "/mnt/proj-c19/ABNEUTRALISATION/analysis_logs/neutralisation_snapshotter.log"
+from config import parse_config
 
 
 def main():
@@ -13,8 +11,9 @@ def main():
 
 
 if __name__ == "__main__":
+    config = parse_config()["analysis"]
     logging.basicConfig(
-        filename=LOGNAME,
+        filename=config["log_path"],
         level=logging.INFO,
         format="%(asctime)s: %(levelname)s: %(name)s: %(message)s",
     )

@@ -1,3 +1,8 @@
+"""
+mappings from 96-well format back to 4*384 wells.
+"""
+
+
 well_dict = {
     "A01": ["A01", "A02", "B01", "B02"],
     "A02": ["A03", "A04", "B03", "B04"],

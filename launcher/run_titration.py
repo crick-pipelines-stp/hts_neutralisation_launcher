@@ -1,14 +1,18 @@
 import logging
 from dispatch import Dispatcher
+from config import parse_config
 
 
-LOGNAME = "/mnt/proj-c19/ABNEUTRALISATION/analysis_logs/neutralisation_titration_snapshotter.log"
-SNAPSHOT_DB_PATH = "/home/warchas/.snapshot_titration.db"
+config = parse_config()["titration"]
+RESULTS_DIR = config["results_dir"]
+SNAPSHOT_DB_PATH = config["snapshot_db"]
+LOGNAME = config["log_path"]
+
 
 def main():
     # save again for titration directory
     dispatch_titration = Dispatcher(
-        results_dir="/mnt/proj-c19/ABNEUTRALISATION/Titration_raw_data",
+        results_dir=RESULTS_DIR,
         db_path=SNAPSHOT_DB_PATH,
         titration=True
     )

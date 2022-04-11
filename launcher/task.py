@@ -9,15 +9,16 @@ import db
 import plaque_assay
 import stitch_images
 import slack
+from config import parse_config
 
 
-REDIS_PORT = 6379
+config = parse_config()["celery"]
 
 
 celery = celery.Celery(
     "task",
-    backend=f"redis://localhost:{REDIS_PORT}/0",
-    broker=f"redis://localhost:{REDIS_PORT}/0",
+    backend=config["backend"],
+    broker=config["broker"],
 )
 
 

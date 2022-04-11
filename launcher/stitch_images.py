@@ -10,45 +10,51 @@ import skimage.io
 
 import utils
 from well_dict import well_dict as WELL_DICT
+from config import parse_config, to_int_tup
 
 
-OUTPUT_DIR = "/mnt/proj-c19/ABNEUTRALISATION/stitched_images"
-# image used for missing wells
-MISSING_WELL_IMG = "/mnt/proj-c19/ABNEUTRALISATION/placeholder_image.png"
-# often run into DNS problems when we can't find the harmony computer by name,
-# so this is a map of name: ip_address
-HARMONY_NAME_IP_MAP = {
-    "1400l18172": "10.6.58.52",
-    "2400l21087": "10.6.48.135",
-    "5krrqd3": "10.6.58.91",
-}
-CHANNELS = (1, 2)
-DILUTIONS = (40, 160, 640, 2560)
-# intensity clipping values, decrease this to increase brightness of images
-MAX_INTENSITY_DAPI = 800
-MAX_INTENSITY_ALEXA488 = 1000
-# image size per well for sample images (pixels)
-IMG_SIZE_SAMPLE = (360, 360)
-# image size per well for plate images (pixels)
-IMG_SIZE_PLATE_WELL = (80, 80)
+config = parse_config()
+cfg_stitch = config["image_stitching"]
+
+
+OUTPUT_DIR = cfg_stitch["output_dir"]
+MISSING_WELL_IMG = cfg_stitch["missing_well_path"]
+HARMONY_NAME_IP_MAP = dict(config["harmony_mappings"])
+MAX_INTENSITY_DAPI = cfg_stitch.getint("max_intensity_dapi")
+MAX_INTENSITY_ALEXA488 = cfg_stitch.getint("max_intensity_alexa488")
+IMG_SIZE_SAMPLE = to_int_tup(cfg_stitch["img_size_sample"])
+IMG_SIZE_PLATE_WELL = to_int_tup(cfg_stitch["img_size_plate_well"])
+CHANNELS = to_int_tup(cfg_stitch["channels"])
+DILUTIONS = to_int_tup(cfg_stitch["dilutions"])
 
 
 class ImageStitcher:
-    """docstring"""
+    """
+    Image stitching class, for both sample and whole plate images.
+    - Channels are stitched and saved as separate images, everything is
+      grayscale.
+    - Uses the Phenix indexfile to fetch images from a URL.
+    - Images are a single field per well which simplifies things.
+    - Sometimes certain wells fail to image, these are then missing as rows
+      in the indexfile. These are replaced by a placeholder image to show as
+      missing and keep plates & samples consistent dimensions.
+    - Images are saved to a directory on CAMP.
+    - Image paths are not recorded as they are consistent and can be
+      constructed from the metadata such as plate barcode and well position.
+    - Raw images are unsigned 16-bit tiffs, stitched images are saved as
+      unsigned 8-bit pngs, with values clipped at a maximum to increase
+      contrast.
+    """
 
     def __init__(self, indexfile_path, output_dir=OUTPUT_DIR):
-        self.placeholder_url = MISSING_WELL_IMG
         self.indexfile_path = indexfile_path
         indexfile = pd.read_csv(indexfile_path, sep="\t")
         self.indexfile = self.fix_indexfile(indexfile)
         self.output_dir = output_dir
-        self.well_dict = WELL_DICT
         self.plate_images = None
         self.dilution_images = None
-        self.ch1_max = MAX_INTENSITY_DAPI
-        self.ch2_max = MAX_INTENSITY_ALEXA488
 
-    def fix_missing_wells(self, indexfile):
+    def fix_missing_wells(self, indexfile: pd.DataFrame) -> pd.DataFrame:
         """
         find missing wells in the indexfile and add
         them in with the URL pointing to a placeholder
@@ -67,7 +73,7 @@ class ImageStitcher:
         merged = indexfile.merge(temp_df, how="outer")
         assert merged.shape[0] == n_expected_rows
         # replace missing URLs with the placeholder URL
-        merged["URL"] = merged["URL"].fillna(self.placeholder_url)
+        merged["URL"] = merged["URL"].fillna(MISSING_WELL_IMG)
         merged = merged.sort_values(["Row", "Column", "Channel ID"])
         return merged
 
@@ -81,7 +87,9 @@ class ImageStitcher:
         replace missing wells with placeholder image, and replace
         computer names with ip addresses
         """
-        return self.fix_urls(self.fix_missing_wells(indexfile))
+        indexfile = self.fix_urls(indexfile)
+        indexfile = self.fix_missing_wells(indexfile)
+        return indexfile
 
     def stitch_plate(self, well_size=IMG_SIZE_PLATE_WELL):
         """stitch well images into a plate montage"""
@@ -99,9 +107,9 @@ class ImageStitcher:
             img_plate = img_stack.reshape(384, *well_size)
             # rescale
             if channel_name == 1:
-                img_plate = img_plate / self.ch1_max
+                img_plate /= MAX_INTENSITY_DAPI
             elif channel_name == 2:
-                img_plate = img_plate / self.ch2_max
+                img_plate /= MAX_INTENSITY_ALEXA488
             else:
                 raise RuntimeError("unrecognised channel")
             img_plate[img_plate > 1.0] = 1.0
@@ -116,7 +124,7 @@ class ImageStitcher:
             plate_images[channel_name] = img_montage
         self.plate_images = plate_images
 
-    def stitch_sample(self, well, img_size=IMG_SIZE_SAMPLE):
+    def stitch_sample(self, well: str, img_size=IMG_SIZE_SAMPLE) -> np.array:
         """stitch individual sample"""
         df = self.indexfile.copy()
         sample_dict = defaultdict(dict)
@@ -124,7 +132,7 @@ class ImageStitcher:
         # as we're dealing with the 96-well labels, but the indexfile is using
         # the original 384-well labels, we need to get the 4 384-well labels
         # which correspond to the given sample well label
-        wells_384 = self.well_dict[well]
+        wells_384 = WELL_DICT[well]
         for well_384 in wells_384:
             row, column = utils.well_to_row_col(well_384)
             # subset dataframe to just correct row/columns
@@ -145,9 +153,9 @@ class ImageStitcher:
                 )
                 # rescale image intensities
                 if channel == 1:
-                    img = img / self.ch1_max
+                    img /= MAX_INTENSITY_DAPI
                 if channel == 2:
-                    img = img / self.ch2_max
+                    img /= MAX_INTENSITY_ALEXA488
                 img[img > 1.0] = 1
                 img = skimage.img_as_float(img)
                 images.append(img)
@@ -165,7 +173,7 @@ class ImageStitcher:
     def stitch_all_samples(self, img_size=IMG_SIZE_SAMPLE):
         """stitch but don't save sample images"""
         dilution_images = {}
-        for well in self.well_dict.keys():
+        for well in WELL_DICT.keys():
             sample_img = self.stitch_sample(well, img_size)
             dilution_images[well] = sample_img
         self.dilution_images = dilution_images
@@ -203,7 +211,7 @@ class ImageStitcher:
         os.makedirs(output_dir_path, exist_ok=True)
         self.output_dir_path = output_dir_path
 
-    def get_plate_barcode(self):
+    def get_plate_barcode(self) -> str:
         """get plate barcode from indexfile path"""
         prev_dir = self.indexfile_path.split(os.sep)[-2]
         return prev_dir.split("__")[0]

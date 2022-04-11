@@ -1,5 +1,6 @@
 import datetime
 import os
+from typing import List
 
 import sqlalchemy
 import sqlalchemy.exc
@@ -18,7 +19,7 @@ def create_engine(test=False):
         host = os.environ.get("NE_HOST_PROD")
     password = os.environ.get("NE_PASSWORD")
     if None in (user, host, password):
-        raise KeyError("db credentials not found in users environment")
+        raise EnvironmentError("db credentials not found in users environment")
     engine = sqlalchemy.create_engine(
         f"mysql://{user}:{password}@{host}/serology", pool_pre_ping=True
     )
@@ -38,10 +39,10 @@ class Database:
         self.session = session
 
     @staticmethod
-    def now():
+    def now() -> str:
         return datetime.datetime.utcnow().replace(microsecond=0).isoformat(" ")
 
-    def get_variant_from_plate_name(self, plate_name, titration=False):
+    def get_variant_from_plate_name(self, plate_name: str, titration=False) -> str:
         """
         plate_name is os.path.basename(full_path).split("__")[0]
 
@@ -65,7 +66,7 @@ class Database:
             raise ValueError(f"cannot find variant from plate name {plate_name}")
         return result.mutant_strain
 
-    def get_variant_ints_from_name(self, variant_name):
+    def get_variant_ints_from_name(self, variant_name: str) -> List[int]:
         """
         get plate prefix integers from variant name.
         e.g "England2" => [1, 2]
@@ -78,7 +79,7 @@ class Database:
         )
         return sorted([int(result.plate_id_1[1:]), int(result.plate_id_2[1:])])
 
-    def get_analysis_state(self, workflow_id, variant, titration=False):
+    def get_analysis_state(self, workflow_id: str, variant: str, titration: bool = False) -> str:
         """
         Get the current state of an analysis from the `processed` table.
 
@@ -149,7 +150,7 @@ class Database:
                     # (will have to update the created_at time)
                     return "stuck"
 
-    def get_stitching_state(self, plate_name):
+    def get_stitching_state(self, plate_name: str) -> str:
         """docstring"""
         result = (
             self.session.query(models.Stitching)
@@ -167,7 +168,7 @@ class Database:
             is_recent = int(time_difference) < 60 * 30
             return "recent" if is_recent else "stuck"
 
-    def is_plate_stitched(self, plate_name):
+    def is_plate_stitched(self, plate_name: str) -> bool:
         """
         Check if a plate is already stitched.
         Arguments:
@@ -184,7 +185,7 @@ class Database:
         )
         return result is not None
 
-    def create_analysis_entry(self, workflow_id, variant):
+    def create_analysis_entry(self, workflow_id: str, variant: str):
         """
         run on task submission
 
@@ -197,7 +198,7 @@ class Database:
         self.session.add(analysis)
         self.session.commit()
 
-    def _processed_entry_exists(self, workflow_id, variant):
+    def _processed_entry_exists(self, workflow_id: str, variant: str):
         """check if a row exists for a given workflow_id/variant"""
         result = (
             self.session.query(models.Analysis)
@@ -209,7 +210,7 @@ class Database:
         )
         return result is not None
 
-    def _alert_if_not_exists(self, workflow_id, variant):
+    def _alert_if_not_exists(self, workflow_id: str, variant: str):
         if not self._processed_entry_exists(workflow_id, variant):
             msg = f"no entry found for {workflow_id} {variant} in processed table, cannot update"
             slack.send_simple_alert(
@@ -217,7 +218,7 @@ class Database:
             )
             raise RuntimeError(msg)
 
-    def update_analysis_entry(self, workflow_id, variant):
+    def update_analysis_entry(self, workflow_id: str, variant: str):
         """
         run on task re-submission after delay
 
@@ -232,7 +233,7 @@ class Database:
         )
         self.session.commit()
 
-    def mark_analysis_entry_as_finished(self, workflow_id, variant):
+    def mark_analysis_entry_as_finished(self, workflow_id: str, variant: str):
         """run on task success"""
         self._alert_if_not_exists(workflow_id, variant)
         # update `finished_at` value to current timestamp
@@ -243,39 +244,39 @@ class Database:
         )
         self.session.commit()
 
-    def update_stitching_entry(self, plate_name):
+    def update_stitching_entry(self, plate_name: str):
         self.session.query(models.Stitching).filter(
             models.Stitching.plate_name == plate_name
         ).update({models.Stitching.created_at: self.now()})
         self.session.commit()
 
-    def mark_stitching_entry_as_finished(self, plate_name):
+    def mark_stitching_entry_as_finished(self, plate_name: str) :
         self.session.query(models.Stitching).filter(
             models.Stitching.plate_name == plate_name
         ).update({models.Stitching.finished_at: self.now()})
         self.session.commit()
 
-    def create_stitching_entry(self, plate_name):
+    def create_stitching_entry(self, plate_name: str):
         """add a plate to the stitched database"""
         stitched_plate = models.Stitching(plate_name=plate_name, created_at=self.now())
         self.session.add(stitched_plate)
         self.session.commit()
 
-    def create_titration_entry(self, workflow_id, variant):
+    def create_titration_entry(self, workflow_id: str, variant: str):
         titration = models.Titration(
             workflow_id=int(workflow_id), variant=variant, created_at=self.now()
         )
         self.session.add(titration)
         self.session.commit()
 
-    def update_titration_entry(self, workflow_id, variant):
+    def update_titration_entry(self, workflow_id: str, variant: str):
         self.session.query(models.Titration).filter(
             models.Titration.workflow_id == int(workflow_id),
             models.Titration.variant == variant,
         ).update({models.Titration.create_at: self.now()})
         self.session.commit()
 
-    def mark_titration_entry_as_finished(self, workflow_id, variant):
+    def mark_titration_entry_as_finished(self, workflow_id: str, variant: str):
         self.session.query(models.Titration).filter(
             models.Titration.workflow_id == int(workflow_id),
             models.Titration.variant == variant,
