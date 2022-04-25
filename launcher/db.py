@@ -11,7 +11,7 @@ import slack
 
 
 def create_engine(test=False):
-    """docstring"""
+    """create sqlalchemy engine"""
     user = os.environ.get("NE_USER")
     if test:
         host = os.environ.get("NE_HOST_TEST")
@@ -27,13 +27,13 @@ def create_engine(test=False):
 
 
 def create_session(engine):
-    """docstring"""
+    """create sqlalchemy ORM session"""
     Session = sqlalchemy.orm.sessionmaker(bind=engine)
     return Session()
 
 
 class Database:
-    """class docstring"""
+    """class to interact with the LIMS serology database."""
 
     def __init__(self, session):
         self.session = session
@@ -79,7 +79,9 @@ class Database:
         )
         return sorted([int(result.plate_id_1[1:]), int(result.plate_id_2[1:])])
 
-    def get_analysis_state(self, workflow_id: str, variant: str, titration: bool = False) -> str:
+    def get_analysis_state(
+        self, workflow_id: str, variant: str, titration: bool = False
+    ) -> str:
         """
         Get the current state of an analysis from the `processed` table.
 
@@ -250,7 +252,7 @@ class Database:
         ).update({models.Stitching.created_at: self.now()})
         self.session.commit()
 
-    def mark_stitching_entry_as_finished(self, plate_name: str) :
+    def mark_stitching_entry_as_finished(self, plate_name: str):
         self.session.query(models.Stitching).filter(
             models.Stitching.plate_name == plate_name
         ).update({models.Stitching.finished_at: self.now()})

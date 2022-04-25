@@ -13,13 +13,13 @@ from well_dict import well_dict as WELL_DICT
 from config import parse_config, to_int_tup
 
 
-config = parse_config()
-cfg_stitch = config["image_stitching"]
+cfg = parse_config()
+cfg_stitch = cfg["image_stitching"]
 
 
 OUTPUT_DIR = cfg_stitch["output_dir"]
 MISSING_WELL_IMG = cfg_stitch["missing_well_path"]
-HARMONY_NAME_IP_MAP = dict(config["harmony_mappings"])
+HARMONY_NAME_IP_MAP = dict(cfg["harmony_mappings"])
 MAX_INTENSITY_DAPI = cfg_stitch.getint("max_intensity_dapi")
 MAX_INTENSITY_ALEXA488 = cfg_stitch.getint("max_intensity_alexa488")
 IMG_SIZE_SAMPLE = to_int_tup(cfg_stitch["img_size_sample"])
@@ -93,7 +93,7 @@ class ImageStitcher:
 
     def stitch_plate(self, well_size=IMG_SIZE_PLATE_WELL):
         """stitch well images into a plate montage"""
-        ch_images = {1: [], 2: []}
+        ch_images = defaultdict(list)
         plate_images = dict()
         for channel_name, group in self.indexfile.groupby("Channel ID"):
             for _, row in group.iterrows():

@@ -1,5 +1,6 @@
 import os
 import logging
+from typing import Optional, Tuple
 
 import slack
 
@@ -7,21 +8,21 @@ import slack
 log = logging.getLogger(__name__)
 
 
-def is_even(n):
+def is_even(n: int) -> bool:
     return n % 2 == 0
 
 
-def is_odd(n):
+def is_odd(n: int) -> bool:
     return n % 2 != 0
 
 
-def well_to_row_col(well):
+def well_to_row_col(well: str) -> Tuple[int, int]:
     row = ord(well[0].lower()) - 96
     col = int(well[1:])
     return row, col
 
 
-def get_dilution_from_row_col(row, col):
+def get_dilution_from_row_col(row, col) -> int:
     row, col = int(row), int(col)
     if is_odd(row) and is_odd(col):
         dilution = 2560
@@ -36,7 +37,7 @@ def get_dilution_from_row_col(row, col):
     return dilution
 
 
-def is_titration_plate(plate_name):
+def is_titration_plate(plate_name: str) -> bool:
     """
     determines if a plate is a titration plate.
     titrations plates starts with T{variant_ints}{workflow_id}
@@ -44,13 +45,13 @@ def is_titration_plate(plate_name):
     return plate_name.startswith("T") and plate_name[1:].isdigit()
 
 
-def is_384_well_plate(dir_name, workflow_id):
+def is_384_well_plate(dir_name: str, workflow_id: str) -> bool:
     basename = os.path.basename(dir_name)
     parsed_workflow = basename.split("__")[0][-6:]
     return basename.startswith(("S", "T")) and parsed_workflow == workflow_id
 
 
-def get_experiment_name(dir_name):
+def get_experiment_name(dir_name: str) -> Optional[str]:
     """get the name of the experiment from a plate directory"""
     plate_dir = os.path.basename(dir_name)
     if plate_dir.startswith("A"):
@@ -68,7 +69,7 @@ def get_experiment_name(dir_name):
     return experiment_name
 
 
-def get_plate_name(dir_name):
+def get_plate_name(dir_name: str) -> str:
     """
     get the name of the plate from the full directory path
     e.g
@@ -81,7 +82,7 @@ def get_plate_name(dir_name):
     return plate_dir.split("__")[0]
 
 
-def get_workflow_id(src_path):
+def get_workflow_id(src_path: str) -> str:
     """returns workflow id as zero-padded string"""
     plate_name = get_plate_name(src_path)
     workflow_id = plate_name[-6:]

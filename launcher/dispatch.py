@@ -17,11 +17,11 @@ from config import parse_config
 
 
 log = logging.getLogger(__name__)
-config = parse_config()
+cfg_analysis = parse_config()["analysis"]
 
 
-RESULTS_DIR = config["analysis"]["results_dir"]
-SNAPSHOT_DB = config["analysis"]["snapshot_db"]
+RESULTS_DIR = cfg_analysis["results_dir"]
+SNAPSHOT_DB = cfg_analysis["snapshot_db"]
 
 
 class Dispatcher:
@@ -61,7 +61,9 @@ class Dispatcher:
                 wanted_workflows.append(path)
         return wanted_workflows
 
-    def is_matching_plate(self, path: str, workflow_id: int, variants: List[int]) -> bool:
+    def is_matching_plate(
+        self, path: str, workflow_id: int, variants: List[int]
+    ) -> bool:
         final_path = os.path.basename(path)
         plate_name = utils.get_plate_name(final_path)
         return (

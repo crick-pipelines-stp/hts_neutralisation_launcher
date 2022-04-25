@@ -7,9 +7,9 @@ from config import parse_config
 
 
 log = logging.getLogger(__name__)
-config = parse_config()
-HOST_IP = config["default"]["host_ip"]
-PORT = config["celery"]["flower_port"]
+cfg = parse_config()
+HOST_IP = cfg["default"]["host_ip"]
+PORT = cfg["celery"]["flower_port"]
 
 
 SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_NEUTRALISATION")

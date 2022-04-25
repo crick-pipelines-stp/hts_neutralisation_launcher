@@ -12,13 +12,11 @@ import slack
 from config import parse_config
 
 
-config = parse_config()["celery"]
+cfg_celery = parse_config()["celery"]
 
 
 celery = celery.Celery(
-    "task",
-    backend=config["backend"],
-    broker=config["broker"],
+    "task", backend=cfg_celery["backend"], broker=cfg_celery["broker"],
 )
 
 

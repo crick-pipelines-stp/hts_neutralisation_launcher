@@ -35,7 +35,11 @@ from typing import List, Optional
 
 
 class SnapshotDB:
-    """An sqlite database which handles dir names and hashes"""
+    """
+    An sqlite database which handles dir names and hashes.
+    It's not expected to use this directly, use the Snapshot class to
+    interact with the SnapshotDB.
+    """
 
     def __init__(self, db_path: str):
         self.db_path = db_path
@@ -102,11 +106,13 @@ class SnapshotDB:
 
 
 class Snapshot:
+    """Class to create and interact with a directory snapshot."""
+
     def __init__(
         self,
         parent_dir: str,
         db_path=".snapshot.db",
-        regex=r"^[S|T].*/*Measurement [0-9]$"
+        regex=r"^[S|T].*/*Measurement [0-9]$",
     ):
         self.parent_dir = parent_dir
         self.regex = re.compile(regex) if regex else None

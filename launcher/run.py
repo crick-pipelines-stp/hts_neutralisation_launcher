@@ -11,9 +11,9 @@ def main():
 
 
 if __name__ == "__main__":
-    config = parse_config()["analysis"]
+    cfg_analysis = parse_config()["analysis"]
     logging.basicConfig(
-        filename=config["log_path"],
+        filename=cfg_analysis["log_path"],
         level=logging.INFO,
         format="%(asctime)s: %(levelname)s: %(name)s: %(message)s",
     )
