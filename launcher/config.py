@@ -1,9 +1,12 @@
+import os
 from typing import Tuple
 
 from configparser import ConfigParser, ExtendedInterpolation
 
 
-def parse_config(config_path="./config.ini") -> ConfigParser:
+def parse_config(config_path=None) -> ConfigParser:
+    if config_path is None:
+        config_path = os.path.join(os.path.dirname(__file__), "config.ini")
     config = ConfigParser(interpolation=ExtendedInterpolation())
     config.read(config_path)
     return config
