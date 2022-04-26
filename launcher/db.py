@@ -35,8 +35,10 @@ def create_session(engine):
 class Database:
     """class to interact with the LIMS serology database."""
 
-    def __init__(self, session):
+    def __init__(self, session, task_timeout_mins: int = 30):
         self.session = session
+        self.task_timeout_mins = task_timeout_mins
+        self.task_timeout_sec = task_timeout_mins * 60
 
     @staticmethod
     def now() -> str:
@@ -98,7 +100,7 @@ class Database:
             analysis is not launched.
         3b. If `created_at` is not recent (unlikely), then something has
             gone wrong and we should re-submit the experiment for analysis,
-            so returning "stuck"
+            so returning "stale"
 
         Arguments:
         -----------
@@ -109,7 +111,7 @@ class Database:
         Returns:
         --------
             string, one of:
-            ("does not exist", "finished", "recent", "stuck")
+            ("does not exist", "finished", "recent", "stale")
         """
         if titration:
             result = (
@@ -143,14 +145,14 @@ class Database:
                 time_now = datetime.datetime.utcnow()
                 time_difference = (time_now - result.created_at).total_seconds()
                 # "recent" defined as within 30 minutes
-                is_recent = int(time_difference) < 60 * 30
+                is_recent = int(time_difference) < self.task_timeout_sec
                 if is_recent:
                     # probably sat in the job-queue, don't re-submit analysis
                     return "recent"
                 else:
                     # 3b. try re-submitting the analysis
                     # (will have to update the created_at time)
-                    return "stuck"
+                    return "stale"
 
     def get_stitching_state(self, plate_name: str) -> str:
         """docstring"""
@@ -167,8 +169,8 @@ class Database:
             # see if it's been recently submitted
             time_now = datetime.datetime.utcnow()
             time_difference = (time_now - result.created_at).total_seconds()
-            is_recent = int(time_difference) < 60 * 30
-            return "recent" if is_recent else "stuck"
+            is_recent = int(time_difference) < self.task_timeout_sec
+            return "recent" if is_recent else "stale"
 
     def is_plate_stitched(self, plate_name: str) -> bool:
         """
@@ -187,21 +189,11 @@ class Database:
         )
         return result is not None
 
-    def create_analysis_entry(self, workflow_id: str, variant: str):
+    def _processed_entry_exists(self, workflow_id: str, variant: str) -> bool:
         """
-        run on task submission
-
-        add an experiment to the processed database setting `created_at`
-        with the current timestamp (default behaviour)
+        Check if a row exists for a given workflow_id/variant in the
+        analysis tracking table.
         """
-        analysis = models.Analysis(
-            workflow_id=int(workflow_id), variant=variant, created_at=self.now()
-        )
-        self.session.add(analysis)
-        self.session.commit()
-
-    def _processed_entry_exists(self, workflow_id: str, variant: str):
-        """check if a row exists for a given workflow_id/variant"""
         result = (
             self.session.query(models.Analysis)
             .filter(
@@ -213,6 +205,11 @@ class Database:
         return result is not None
 
     def _alert_if_not_exists(self, workflow_id: str, variant: str):
+        """
+        Raise error and send slack alert if trying to update an entry, but
+        there is no entry found for that workflow_id & variant in the
+        analysis tracking table.
+        """
         if not self._processed_entry_exists(workflow_id, variant):
             msg = f"no entry found for {workflow_id} {variant} in processed table, cannot update"
             slack.send_simple_alert(
@@ -220,13 +217,16 @@ class Database:
             )
             raise RuntimeError(msg)
 
-    def update_analysis_entry(self, workflow_id: str, variant: str):
-        """
-        run on task re-submission after delay
+    def create_analysis_entry(self, workflow_id: str, variant: str):
+        """create entry for new job submission with current timestamp"""
+        analysis = models.Analysis(
+            workflow_id=int(workflow_id), variant=variant, created_at=self.now()
+        )
+        self.session.add(analysis)
+        self.session.commit()
 
-        for a given workflow_id/variant, replace `created_at` time
-        to current timestamp when relaunching a stuck experiment.
-        """
+    def update_analysis_entry(self, workflow_id: str, variant: str):
+        """update created_at time for resubmitting a stale job"""
         self._alert_if_not_exists(workflow_id, variant)
         self.session.query(models.Analysis).filter(
             models.Analysis.workflow_id == int(workflow_id)
@@ -236,7 +236,7 @@ class Database:
         self.session.commit()
 
     def mark_analysis_entry_as_finished(self, workflow_id: str, variant: str):
-        """run on task success"""
+        """run on task success, update finished_at time"""
         self._alert_if_not_exists(workflow_id, variant)
         # update `finished_at` value to current timestamp
         self.session.query(models.Analysis).filter(
@@ -247,12 +247,14 @@ class Database:
         self.session.commit()
 
     def update_stitching_entry(self, plate_name: str):
+        """update created_at time for resubmitting a stale job"""
         self.session.query(models.Stitching).filter(
             models.Stitching.plate_name == plate_name
         ).update({models.Stitching.created_at: self.now()})
         self.session.commit()
 
     def mark_stitching_entry_as_finished(self, plate_name: str):
+        """run on task success, update finished_at time"""
         self.session.query(models.Stitching).filter(
             models.Stitching.plate_name == plate_name
         ).update({models.Stitching.finished_at: self.now()})
@@ -265,6 +267,7 @@ class Database:
         self.session.commit()
 
     def create_titration_entry(self, workflow_id: str, variant: str):
+        """create entry for new job with current timestamp"""
         titration = models.Titration(
             workflow_id=int(workflow_id), variant=variant, created_at=self.now()
         )
@@ -272,6 +275,7 @@ class Database:
         self.session.commit()
 
     def update_titration_entry(self, workflow_id: str, variant: str):
+        """update created_at time for resubmitting a stale job"""
         self.session.query(models.Titration).filter(
             models.Titration.workflow_id == int(workflow_id),
             models.Titration.variant == variant,
@@ -279,6 +283,7 @@ class Database:
         self.session.commit()
 
     def mark_titration_entry_as_finished(self, workflow_id: str, variant: str):
+        """run on task success, update finished_at time"""
         self.session.query(models.Titration).filter(
             models.Titration.workflow_id == int(workflow_id),
             models.Titration.variant == variant,

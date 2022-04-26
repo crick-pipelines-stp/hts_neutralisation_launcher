@@ -25,6 +25,11 @@ SNAPSHOT_DB = cfg_analysis["snapshot_db"]
 
 
 class Dispatcher:
+    """
+    Most of the logic for detecting whether to submit analysis and image
+    stitching jobs to celery task queue.
+    """
+
     def __init__(self, results_dir=RESULTS_DIR, db_path=SNAPSHOT_DB, titration=False):
         self.results_dir = results_dir
         self.db_path = db_path
@@ -35,6 +40,14 @@ class Dispatcher:
         self.database = db.Database(session)
 
     def get_new_directories(self) -> List[str]:
+        """
+        Uses snapshotting to get new directories (if present).
+        This returns a list of all the new directories which match the given
+        regex filter, which may contain multiple workflows and variants, and
+        may not contain a matching replicate plate.
+        If no new valid directories are found, the entire process exits with
+        an exit code 0.
+        """
         snapshot = Snapshot(self.results_dir, self.db_path, regex=self.regex_filter)
         if snapshot.current_hash == snapshot.stored_hash:
             log.info(
@@ -51,7 +64,14 @@ class Dispatcher:
         snapshot.make_snapshot()
         return new_data
 
-    def create_plate_list(self, workflow_id, variant):
+    def create_plate_list(self, workflow_id: str, variant: str) -> List[str]:
+        """
+        Given a workflow and variant, this will find any plates in the results
+        directory that match.
+        It is inefficient, compared to simply pairing up replicate plates from
+        `self.get_new_directories()`, but it is done this way to account
+        for when replicate pairs are not exported at the same time.
+        """
         all_subdirs = [i for i in os.listdir(self.results_dir)]
         full_paths = [os.path.join(self.results_dir, i) for i in all_subdirs]
         variant_ints = self.database.get_variant_ints_from_name(variant)
@@ -62,8 +82,12 @@ class Dispatcher:
         return wanted_workflows
 
     def is_matching_plate(
-        self, path: str, workflow_id: int, variants: List[int]
+        self, path: str, workflow_id: str, variants: List[int]
     ) -> bool:
+        """
+        Determine if a plate path matches a given workflow_id + variant.
+        Variant info is passed as a list integers, e.g [1, 2] is "England2".
+        """
         final_path = os.path.basename(path)
         plate_name = utils.get_plate_name(final_path)
         return (
@@ -73,6 +97,11 @@ class Dispatcher:
         )
 
     def dispatch_plate(self, plate_path: str):
+        """
+        Given a single plate path, create image stitching job.
+        Then look if there is a matching replicate plate, if so create
+        analysis job.
+        """
         plate_name = utils.get_plate_name(plate_path)
         workflow_id = utils.get_workflow_id(plate_name)
         is_titration = utils.is_titration_plate(plate_name)
@@ -93,6 +122,9 @@ class Dispatcher:
         """
         Determine if valid and new exported data, and if so launches
         a new celery analysis task.
+        This checks if an analysis job has already been submitted for a pair
+        of plates. This is a redundant check as plaque_assay will not upload
+        duplicated results for a given workflow_id + variant.
         Parameters:
         ------------
         plate_list: list of plate paths from self.create_plate_list()
@@ -113,16 +145,15 @@ class Dispatcher:
             log.info(
                 f"workflow_id: {workflow_id} variant: {variant} has recently been added to the job queue, skipping..."
             )
-        elif analysis_state == "stuck":
+        elif analysis_state == "stale":
             # reset create_at timestamp and resubmit to job queue
             log.info(
-                f"workflow_id: {workflow_id} variant: {variant} has old processed entry but not finished, resubmitting to job queue..."
+                f"workflow_id: {workflow_id} variant: {variant} is stale, resubmitting to job queue..."
             )
             if titration:
                 self.database.update_titration_entry(workflow_id, variant)
             else:
                 self.database.update_analysis_entry(workflow_id, variant)
-            assert len(plate_list) == 2
             log.info(f"both plates for {workflow_id}: {variant} found")
             if titration:
                 task.background_titration_analysis_384(plate_list)
@@ -132,7 +163,6 @@ class Dispatcher:
                 log.info("analysis launched")
         elif analysis_state == "does not exist":
             log.info(f"new workflow_id: {workflow_id} variant: {variant}")
-            assert len(plate_list) == 2
             log.info(f"both plates for {workflow_id}: {variant} found")
             if titration:
                 self.database.create_titration_entry(workflow_id, variant)
@@ -166,11 +196,9 @@ class Dispatcher:
         elif stitching_state == "recent":
             # recent, ignore
             log.info(f"plate: {plate_name} has recently been submitted, skipping...")
-        elif stitching_state == "stuck":
+        elif stitching_state == "stale":
             # reset create_at timestamp and resubmit to job queue
-            log.info(
-                f"plate: {plate_name} has old processed entry but not finished, resubmitting to job queue..."
-            )
+            log.info(f"plate: {plate_name} is stale, resubmitting to job queue...")
             self.database.update_stitching_entry(plate_name)
             indexfile_path = os.path.join(plate_path, "indexfile.txt")
             if is_titration:

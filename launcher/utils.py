@@ -17,12 +17,18 @@ def is_odd(n: int) -> bool:
 
 
 def well_to_row_col(well: str) -> Tuple[int, int]:
+    """
+    convert alphanumeric well label to row and column integers (1-indexed)
+    """
     row = ord(well[0].lower()) - 96
     col = int(well[1:])
     return row, col
 
 
 def get_dilution_from_row_col(row, col) -> int:
+    """
+    Get dilution value from a well's row and column position.
+    """
     row, col = int(row), int(col)
     if is_odd(row) and is_odd(col):
         dilution = 2560

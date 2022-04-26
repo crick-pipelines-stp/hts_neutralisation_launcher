@@ -46,13 +46,20 @@ class ImageStitcher:
       contrast.
     """
 
-    def __init__(self, indexfile_path, output_dir=OUTPUT_DIR):
+    def __init__(
+        self,
+        indexfile_path,
+        output_dir=OUTPUT_DIR,
+        max_dapi=MAX_INTENSITY_DAPI,
+        max_alexa488=MAX_INTENSITY_ALEXA488,
+    ):
         self.indexfile_path = indexfile_path
         indexfile = pd.read_csv(indexfile_path, sep="\t")
         self.indexfile = self.fix_indexfile(indexfile)
         self.output_dir = output_dir
         self.plate_images = None
         self.dilution_images = None
+        self.max_intensity_channel = {1: max_dapi, 2: max_alexa488}
 
     def fix_missing_wells(self, indexfile: pd.DataFrame) -> pd.DataFrame:
         """
@@ -95,23 +102,18 @@ class ImageStitcher:
         """stitch well images into a plate montage"""
         ch_images = defaultdict(list)
         plate_images = dict()
-        for channel_name, group in self.indexfile.groupby("Channel ID"):
+        for channel, group in self.indexfile.groupby("Channel ID"):
             for _, row in group.iterrows():
                 url = row["URL"]
                 img = skimage.io.imread(url, as_gray=True)
                 img = skimage.transform.resize(
                     img, well_size, anti_aliasing=True, preserve_range=True
                 )
-                ch_images[channel_name].append(img)
-            img_stack = np.stack(ch_images[channel_name])
+                ch_images[channel].append(img)
+            img_stack = np.stack(ch_images[channel])
             img_plate = img_stack.reshape(384, *well_size)
-            # rescale
-            if channel_name == 1:
-                img_plate /= MAX_INTENSITY_DAPI
-            elif channel_name == 2:
-                img_plate /= MAX_INTENSITY_ALEXA488
-            else:
-                raise RuntimeError("unrecognised channel")
+            # rescale intensity
+            img_plate /= self.max_intensity_channel[channel]
             img_plate[img_plate > 1.0] = 1.0
             img_plate = skimage.img_as_float(img_plate)
             img_montage = skimage.util.montage(
@@ -121,7 +123,7 @@ class ImageStitcher:
                 grid_shape=(16, 24),
                 rescale_intensity=False,
             )
-            plate_images[channel_name] = img_montage
+            plate_images[channel] = img_montage
         self.plate_images = plate_images
 
     def stitch_sample(self, well: str, img_size=IMG_SIZE_SAMPLE) -> np.array:
@@ -152,10 +154,7 @@ class ImageStitcher:
                     img, img_size, anti_aliasing=True, preserve_range=True
                 )
                 # rescale image intensities
-                if channel == 1:
-                    img /= MAX_INTENSITY_DAPI
-                if channel == 2:
-                    img /= MAX_INTENSITY_ALEXA488
+                img /= self.max_intensity_channel[channel]
                 img[img > 1.0] = 1
                 img = skimage.img_as_float(img)
                 images.append(img)
