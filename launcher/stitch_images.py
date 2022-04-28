@@ -87,7 +87,8 @@ class ImageStitcher:
     @staticmethod
     def fix_urls(df: pd.DataFrame) -> pd.DataFrame:
         # not a regex, but needed for pandas substring replacement
-        return df.URL.replace(HARMONY_NAME_IP_MAP, regex=True)
+        df.URL = df.URL.replace(HARMONY_NAME_IP_MAP, regex=True)
+        return df
 
     def fix_indexfile(self, indexfile: pd.DataFrame) -> pd.DataFrame:
         """
