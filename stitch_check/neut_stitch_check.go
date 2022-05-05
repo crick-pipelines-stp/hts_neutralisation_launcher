@@ -34,6 +34,8 @@ type StitchingTask struct {
 	variant    string // parsed from plateName + db query
 }
 
+const DATEFMT = "2006-01-02 15:04:05"
+
 func connect(test bool) Database {
 	// create connection to serology database
 	user := os.Getenv("NE_USER")
@@ -58,8 +60,14 @@ func connect(test bool) Database {
 }
 
 func (db Database) getAnalysisTasks() []AnalysisTask {
+	// get all analysis tasks as per NE_task_tracking_analysis table
 	tasks := []AnalysisTask{}
-	rows, err := db.con.Query("SELECT workflow_id, variant, created_at, finished_at FROM NE_task_tracking_analysis")
+	rows, err := db.con.Query(`
+		SELECT
+			workflow_id, variant, created_at, finished_at
+		FROM
+			NE_task_tracking_analysis
+	`)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -69,8 +77,8 @@ func (db Database) getAnalysisTasks() []AnalysisTask {
 	for rows.Next() {
 		rows.Scan(&task.workflowID, &task.variant, &createdAt, &finishedAt)
 		// go's stupid datetime parsing
-		createdAtd, _ := time.Parse("2006-01-02 15:04:05", createdAt)
-		finishedAtd, _ := time.Parse("2006-01-02 15:04:05", finishedAt)
+		createdAtd, _ := time.Parse(DATEFMT, createdAt)
+		finishedAtd, _ := time.Parse(DATEFMT, finishedAt)
 		task.createdAt = createdAtd
 		task.finishedAt = finishedAtd
 		tasks = append(tasks, task)
@@ -79,19 +87,29 @@ func (db Database) getAnalysisTasks() []AnalysisTask {
 }
 
 func (db Database) getStitchingTasks() []StitchingTask {
+	// get all stitching tasks as per NE_task_tracking_stitching table
 	tasks := []StitchingTask{}
-	rows, err := db.con.Query("SELECT plate_name, created_at, finished_at FROM NE_task_tracking_stitching")
+	rows, err := db.con.Query(`
+		SELECT
+			plate_name, created_at, finished_at
+		FROM
+			NE_task_tracking_stitching
+	`)
 	if err != nil {
 		log.Fatalln(err)
 	}
 	var task StitchingTask
-	var createdAt string
-	var finishedAt string
 	for rows.Next() {
+		// variables declared each iteration otherwise null values in database
+		// are incorrectly recorded as the last valid Time
+		// So now null values are parsed as zero time, can be checked with
+		// Time.IsZero()
+		var createdAt string
+		var finishedAt string
 		rows.Scan(&task.plateName, &createdAt, &finishedAt)
 		// go's stupid datetime parsing
-		createdAtd, _ := time.Parse("2006-01-02 15:04:05", createdAt)
-		finishedAtd, _ := time.Parse("2006-01-02 15:04:05", finishedAt)
+		createdAtd, _ := time.Parse(DATEFMT, createdAt)
+		finishedAtd, _ := time.Parse(DATEFMT, finishedAt)
 		task.createdAt = createdAtd
 		task.finishedAt = finishedAtd
 		task.variant = db.getVariantName(task.plateName)
@@ -99,22 +117,6 @@ func (db Database) getStitchingTasks() []StitchingTask {
 		tasks = append(tasks, task)
 	}
 	return tasks
-}
-
-func (db Database) getStrains() {
-	rows, err := db.con.Query("SELECT * FROM NE_available_strains")
-	if err != nil {
-		log.Fatalln(err)
-	}
-
-	var id int
-	var mutant_strain string
-	var plate_id_1 string
-	var plate_id_2 string
-	for rows.Next() {
-		rows.Scan(&id, &mutant_strain, &plate_id_1, &plate_id_2)
-		fmt.Println(id, mutant_strain, plate_id_1, plate_id_2)
-	}
 }
 
 func getWorkflowID(platename string) int {
@@ -137,7 +139,14 @@ func (db Database) getVariantName(platename string) string {
 		// variant
 		varCode = strings.Replace(varCode, "T", "S", -1)
 	}
-	stmt, err := db.con.Prepare("SELECT mutant_strain FROM NE_available_strains WHERE plate_id_1 = ?")
+	stmt, err := db.con.Prepare(`
+		SELECT
+			mutant_strain
+		FROM
+			NE_available_strains
+		WHERE
+			plate_id_1 = ?
+	`)
 	stmt.QueryRow(varCode).Scan(&variant)
 	if err != nil {
 		log.Fatalln(err)
@@ -145,7 +154,14 @@ func (db Database) getVariantName(platename string) string {
 	if variant != "" {
 		return variant
 	}
-	stmt2, err := db.con.Prepare("SELECT mutant_strain FROM NE_available_strains WHERE plate_id_2 = ?")
+	stmt2, err := db.con.Prepare(`
+		SELECT
+			mutant_strain
+		FROM
+			NE_available_strains
+		WHERE
+			plate_id_2 = ?
+	`)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -153,34 +169,71 @@ func (db Database) getVariantName(platename string) string {
 	return variant
 }
 
+func (s StitchingTask) isOld() bool {
+	// check if a stitchingTask has been submitted more than 1 hour ago
+	currTime := time.Now().UTC()
+	diff := currTime.Sub(s.createdAt)
+	return diff.Hours() > 1.0
+}
+
+func (s StitchingTask) failed() bool {
+	// a stithing task has failed if it's old (createdAt > 1 hour ago) but has
+	// not been marked as complete with a finishedAt time
+	return s.isOld() && s.finishedAt.IsZero()
+}
+
+func (s StitchingTask) successful() bool {
+	return !s.failed()
+}
+
+func (a AnalysisTask) sameWorkflowAs(s StitchingTask) bool {
+	return a.workflowID == s.workflowID
+}
+
+func (a AnalysisTask) sameVariantAs(s StitchingTask) bool {
+	return a.variant == s.variant
+}
+
+func (a AnalysisTask) sameAs(s StitchingTask) bool {
+	return a.sameWorkflowAs(s) && a.sameVariantAs(s)
+}
+
 func (analysis AnalysisTask) hasStitched(stitchings []StitchingTask) bool {
-	matchCount := 0
+	// determine if a single analysis has 2 corresponding stitched plates
+	stitchPlateCount := 0
 	for _, stitch := range stitchings {
-		if analysis.workflowID == stitch.workflowID && analysis.variant == stitch.variant {
-			// TODO check actually has a finished at time
-			matchCount++
+		if analysis.sameAs(stitch) && stitch.successful() {
+			stitchPlateCount++
 		}
-		if matchCount == 2 {
+		if stitchPlateCount == 2 {
 			return true
 		}
 	}
 	return false
 }
 
-func findMissingStitching(analyses []AnalysisTask, stitchings []StitchingTask) (int, []AnalysisTask) {
+func findMissingStitching(analyses []AnalysisTask, stitchings []StitchingTask) (bool, []AnalysisTask) {
+	// return if there are analyses that don't have 2 stitched plates
+	// and return list of those analyses
 	missing := []AnalysisTask{}
 	for _, analysis := range analyses {
 		if !analysis.hasStitched(stitchings) {
 			missing = append(missing, analysis)
 		}
 	}
-	return len(missing), missing
+	return len(missing) > 0, missing
 }
 
 func sendSlackNotification(msg string) error {
+	// send slack notification with number of workflows + variants with missing
+	// plates, and a list of them
 	webhookURL := os.Getenv("SLACK_WEBHOOK_NEUTRALISATION")
 	body := fmt.Sprintf("{'text': '%s'}", msg)
-	resp, err := http.Post(webhookURL, "application/json", bytes.NewBufferString(body))
+	resp, err := http.Post(
+		webhookURL,
+		"application/json",
+		bytes.NewBufferString(body),
+	)
 	if err != nil {
 		return err
 	}
@@ -192,9 +245,12 @@ func sendSlackNotification(msg string) error {
 	return nil
 }
 
-func formatMsg(nFailed int, failures []AnalysisTask) string {
+func formatMsg(failures []AnalysisTask) string {
+	// create string suitable for slack message
 	msg := strings.Builder{}
-	msg.WriteString(fmt.Sprintf(":warning: Found %d analyses with no stitched plates:\n", nFailed))
+	nFailures := len(failures)
+	header := fmt.Sprintf(":warning: Found %d analyses with <2 stitched plates:\n", nFailures)
+	msg.WriteString(header)
 	for _, f := range failures {
 		msg.WriteString(fmt.Sprintf(" - %d  %s\n", f.workflowID, f.variant))
 	}
@@ -206,9 +262,9 @@ func main() {
 	defer db.con.Close()
 	analyses := db.getAnalysisTasks()
 	stitchings := db.getStitchingTasks()
-	nMissing, missing := findMissingStitching(analyses, stitchings)
-	if nMissing > 0 {
-		msg := formatMsg(nMissing, missing)
+	hasMissing, missing := findMissingStitching(analyses, stitchings)
+	if hasMissing {
+		msg := formatMsg(missing)
 		err := sendSlackNotification(msg)
 		if err != nil {
 			log.Fatalln(err)
