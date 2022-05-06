@@ -176,6 +176,10 @@ func (s StitchingTask) isOld() bool {
 	return diff.Hours() > 1.0
 }
 
+func (s StitchingTask) isNew() bool {
+	return !s.isOld()
+}
+
 func (s StitchingTask) failed() bool {
 	// a stithing task has failed if it's old (createdAt > 1 hour ago) but has
 	// not been marked as complete with a finishedAt time
@@ -202,7 +206,7 @@ func (analysis AnalysisTask) hasStitched(stitchings []StitchingTask) bool {
 	// determine if a single analysis has 2 corresponding stitched plates
 	stitchPlateCount := 0
 	for _, stitch := range stitchings {
-		if analysis.sameAs(stitch) && stitch.successful() {
+		if analysis.sameAs(stitch) && (stitch.successful() || stitch.isNew()) {
 			stitchPlateCount++
 		}
 		if stitchPlateCount == 2 {
