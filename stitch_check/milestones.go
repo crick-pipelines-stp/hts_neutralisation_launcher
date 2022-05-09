@@ -205,7 +205,7 @@ func checkPlates(limsDB LimsDB, mDB MilestoneDB) {
 	if isMilestone {
 		// send slack alert
 		msg := fmt.Sprintf(
-			":partying_face: New milestone! Over %d wells (%d) assayed",
+			":partying_face: New milestone! Over %d plates (%d) assayed",
 			currMilestone,
 			currPlates,
 		)

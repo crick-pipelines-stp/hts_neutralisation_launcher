@@ -145,27 +145,12 @@ func (db Database) getVariantName(platename string) string {
 		FROM
 			NE_available_strains
 		WHERE
-			plate_id_1 = ?
+			plate_id_1 = ?  OR plate_id_2 = ?
 	`)
-	stmt.QueryRow(varCode).Scan(&variant)
+	stmt.QueryRow(varCode, varCode).Scan(&variant)
 	if err != nil {
 		log.Fatalln(err)
 	}
-	if variant != "" {
-		return variant
-	}
-	stmt2, err := db.con.Prepare(`
-		SELECT
-			mutant_strain
-		FROM
-			NE_available_strains
-		WHERE
-			plate_id_2 = ?
-	`)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	stmt2.QueryRow(varCode).Scan(&variant)
 	return variant
 }
 
