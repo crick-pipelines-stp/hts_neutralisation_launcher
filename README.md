@@ -47,9 +47,12 @@ listed below:
 
 ```
 # run neutralisation snapshot every 5 minutes to detect new files
-*/5 * * * * source $HOME/.bashrc; $HOME/miniconda3/bin/python3.8 /home/warchas/launcher/launcher/run.py
-*/5 * * * * source $HOME/.bashrc; $HOME/miniconda3/bin/python3.8 /home/warchas/launcher/launcher/run_titration.py
+*/5 * * * * source $HOME/.bashrc; $HOME/miniconda3/bin/python3.8 $HOME/launcher/launcher/run.py
+*/5 * * * * source $HOME/.bashrc; $HOME/miniconda3/bin/python3.8 $HOME/launcher/launcher/run_titration.py
 ```
+
+--------------
+
 
 ### Drag and drop portal
 There is also a "drag-and-drop" version of the neutralisation analysis, which
