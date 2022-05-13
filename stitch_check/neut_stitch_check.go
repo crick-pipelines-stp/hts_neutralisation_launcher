@@ -88,7 +88,7 @@ func (db Database) getAnalysisTasks() []AnalysisTask {
 
 func (db Database) getStitchingTasks() []StitchingTask {
 	// get all stitching tasks as per NE_task_tracking_stitching table
-	tasks := []StitchingTask{}
+	taskCollection := []StitchingTask{}
 	rows, err := db.con.Query(`
 		SELECT
 			plate_name, created_at, finished_at
@@ -114,9 +114,9 @@ func (db Database) getStitchingTasks() []StitchingTask {
 		task.finishedAt = finishedAtd
 		task.variant = db.getVariantName(task.plateName)
 		task.workflowID = getWorkflowID(task.plateName)
-		tasks = append(tasks, task)
+		taskCollection = append(taskCollection, task)
 	}
-	return tasks
+	return taskCollection
 }
 
 func getWorkflowID(platename string) int {
@@ -130,7 +130,6 @@ func getWorkflowID(platename string) int {
 
 func (db Database) getVariantName(platename string) string {
 	// look up variant name from platename using variant integers
-	// TODO: determine which column to check whether variant int is odd or even
 	var variant string
 	var varCode string
 	varCode = platename[:3]

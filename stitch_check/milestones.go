@@ -250,12 +250,16 @@ func sendSlackAlert(msg string) error {
 	return nil
 }
 
-func main() {
-	create := os.Getenv("CREATE") == "1"
-	mDB := connectMilestone(create)
-	limsDB := connectLIMS()
+func checkAll(limsDB LimsDB, mDB MilestoneDB) {
 	checkWorkflows(limsDB, mDB)
 	checkWells(limsDB, mDB)
 	checkPlates(limsDB, mDB)
 	checkImages(limsDB, mDB)
+}
+
+func main() {
+	create := os.Getenv("CREATE") == "1"
+	mDB := connectMilestone(create)
+	limsDB := connectLIMS()
+	checkAll(limsDB, mDB)
 }
