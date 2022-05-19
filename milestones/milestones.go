@@ -49,21 +49,9 @@ func connectLIMS() LimsDB {
 	return LimsDB{db}
 }
 
-func connectMilestone(create bool) MilestoneDB {
-	var db MilestoneDB
-	if create {
-		log.Printf("creating new database at '%s'\n", DB_PATH)
-		db = newDB()
-	} else {
-		log.Printf("using existing database '%s'\n", DB_PATH)
-		db = getExistingDB()
-	}
-	return db
-}
-
-func newDB() MilestoneDB {
+func connectMilestoneDB() MilestoneDB {
 	const createStr string = `
-		CREATE TABLE milestones (
+		CREATE TABLE IF NOT EXISTS milestones (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			name STRING NOT NULL,
 			interval INTEGER NOT NULL DEFAULT 1,
@@ -81,16 +69,6 @@ func newDB() MilestoneDB {
 		_, err := stmt.Exec(name, value)
 		handleError(err)
 	}
-	return MilestoneDB{db}
-}
-
-func getExistingDB() MilestoneDB {
-	// check if database actually exist
-	if _, err := os.Stat(DB_PATH); errors.Is(err, os.ErrNotExist) {
-		log.Fatalf("ERROR: '%s' does not exist, have you created the db?\n", DB_PATH)
-	}
-	db, err := sql.Open("sqlite3", DB_PATH)
-	handleError(err)
 	return MilestoneDB{db}
 }
 
@@ -270,8 +248,7 @@ func checkAll(limsDB LimsDB, mDB MilestoneDB) {
 }
 
 func main() {
-	create := os.Getenv("CREATE") == "1"
-	mDB := connectMilestone(create)
+	mDB := connectMilestoneDB()
 	limsDB := connectLIMS()
 	checkAll(limsDB, mDB)
 }
