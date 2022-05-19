@@ -144,6 +144,15 @@ func (db LimsDB) getNPlates() int {
 	return plates
 }
 
+func (db LimsDB) getNTitrationWells() int {
+	var plates int
+	stmt := db.con.QueryRow("SELECT COUNT(*) FROM NE_task_tracking_stitching WHERE plate_name LIKE 'T%'")
+	err := stmt.Scan(&plates)
+	handleError(err)
+	wells := plates * 384
+	return wells
+}
+
 func (db LimsDB) getNWells() int {
 	// total number of wells, including empty, controls etc
 	var imgs int
@@ -151,6 +160,7 @@ func (db LimsDB) getNWells() int {
 	err := stmt.Scan(&imgs)
 	handleError(err)
 	wells := imgs / 2 // div2 as there are 2 images per well (channels)
+	wells += db.getNTitrationWells()
 	log.Printf("current n wells = %d\n", wells)
 	return wells
 }
@@ -161,6 +171,8 @@ func (db LimsDB) getNImages() int {
 	stmt := db.con.QueryRow("SELECT COUNT(*) FROM NE_raw_index WHERE workflow_id >=68")
 	err := stmt.Scan(&imgs)
 	handleError(err)
+	titrationImgs := db.getNTitrationWells() * 2
+	imgs += titrationImgs
 	log.Printf("current n images = %d\n", imgs)
 	return imgs
 }
