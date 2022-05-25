@@ -55,14 +55,15 @@ func connectMilestoneDB() MilestoneDB {
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			name STRING NOT NULL,
 			interval INTEGER NOT NULL DEFAULT 1,
-			milestone INTEGER NOT NULL
+			milestone INTEGER NOT NULL,
+ 			UNIQUE(name)
 		)
 	`
 	db, err := sql.Open("sqlite3", DB_PATH)
 	handleError(err)
 	_, err = db.Exec(createStr)
 	handleError(err)
-	querystr := "INSERT INTO milestones (name, milestone) VALUES (?, ?)"
+	querystr := "INSERT OR IGNORE INTO milestones (name, milestone) VALUES (?, ?)"
 	stmt, err := db.Prepare(querystr)
 	handleError(err)
 	for name, value := range milestones {
