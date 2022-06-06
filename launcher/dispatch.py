@@ -105,9 +105,13 @@ class Dispatcher:
         plate_name = utils.get_plate_name(plate_path)
         workflow_id = utils.get_workflow_id(plate_name)
         is_titration = utils.is_titration_plate(plate_name)
-        variant = self.database.get_variant_from_plate_name(
-            plate_name, titration=is_titration
-        )
+        try:
+            variant = self.database.get_variant_from_plate_name(
+                plate_name, titration=is_titration
+            )
+        except ValueError as err:
+            log.error(err)
+            return
         self.handle_stitching(plate_path, workflow_id, plate_name, is_titration)
         plate_list = self.create_plate_list(workflow_id, variant)
         log.info(f"plate_list = {plate_list}")
