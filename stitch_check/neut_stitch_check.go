@@ -154,10 +154,10 @@ func (db Database) getVariantName(platename string) string {
 }
 
 func (s StitchingTask) isOld() bool {
-	// check if a stitchingTask has been submitted more than 1 hour ago
+	// check if a stitchingTask has been submitted more than 2 hours ago
 	currTime := time.Now().UTC()
 	diff := currTime.Sub(s.createdAt)
-	return diff.Hours() > 1.0
+	return diff.Hours() > 2.0
 }
 
 func (s StitchingTask) isNew() bool {
