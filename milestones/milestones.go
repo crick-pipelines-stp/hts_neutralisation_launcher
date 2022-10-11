@@ -162,7 +162,7 @@ func checkWorkflows(limsDB LimsDB, mDB MilestoneDB) {
 	if isMilestone {
 		// send slack alert
 		msg := fmt.Sprintf(
-			":partying_face: New milestone! Over %d workflows (%d) registered",
+			":partying_face: New milestone! Over %d workflows with results (%d)",
 			currMilestone,
 			currWorkflow,
 		)
@@ -178,7 +178,7 @@ func checkWells(limsDB LimsDB, mDB MilestoneDB) {
 	if isMilestone {
 		// send slack alert
 		msg := fmt.Sprintf(
-			":partying_face: New milestone! Over %d wells (%d) assayed",
+			":partying_face: New milestone! Over %d wells assayed (%d)",
 			currMilestone,
 			currWells,
 		)
@@ -194,7 +194,7 @@ func checkPlates(limsDB LimsDB, mDB MilestoneDB) {
 	if isMilestone {
 		// send slack alert
 		msg := fmt.Sprintf(
-			":partying_face: New milestone! Over %d plates (%d) assayed",
+			":partying_face: New milestone! Over %d plates assayed (%d)",
 			currMilestone,
 			currPlates,
 		)
@@ -210,7 +210,7 @@ func checkImages(limsDB LimsDB, mDB MilestoneDB) {
 	if isMilestone {
 		// send slack alert
 		msg := fmt.Sprintf(
-			":partying_face: New milestone! Over %d images (%d) imaged",
+			":partying_face: New milestone! Over %d images imaged (%d)",
 			currMilestone,
 			currImages,
 		)
