@@ -166,7 +166,6 @@ func checkWorkflows(limsDB LimsDB, mDB MilestoneDB) {
 			currMilestone,
 			currWorkflow,
 		)
-		log.Println(msg)
 		err := sendSlackAlert(msg)
 		handleError(err)
 		mDB.updateMilestone("workflow")
@@ -183,7 +182,6 @@ func checkWells(limsDB LimsDB, mDB MilestoneDB) {
 			currMilestone,
 			currWells,
 		)
-		log.Println(msg)
 		err := sendSlackAlert(msg)
 		handleError(err)
 		mDB.updateMilestone("well")
@@ -200,7 +198,6 @@ func checkPlates(limsDB LimsDB, mDB MilestoneDB) {
 			currMilestone,
 			currPlates,
 		)
-		log.Println(msg)
 		err := sendSlackAlert(msg)
 		handleError(err)
 		mDB.updateMilestone("plate")
@@ -217,7 +214,6 @@ func checkImages(limsDB LimsDB, mDB MilestoneDB) {
 			currMilestone,
 			currImages,
 		)
-		log.Println(msg)
 		err := sendSlackAlert(msg)
 		handleError(err)
 		mDB.updateMilestone("image")
