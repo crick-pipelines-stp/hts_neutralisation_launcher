@@ -16,7 +16,9 @@ cfg_celery = parse_config()["celery"]
 
 
 celery = celery.Celery(
-    "task", backend=cfg_celery["backend"], broker=cfg_celery["broker"],
+    "task",
+    backend=cfg_celery["backend"],
+    broker=cfg_celery["broker"],
 )
 
 
@@ -166,6 +168,9 @@ def background_image_stitch_384(indexfile_path):
     stitcher.stitch_plate()
     stitcher.stitch_all_samples()
     stitcher.save_all()
+    missing = stitcher.collect_missing_images()
+    if missing:
+        slack.send_warning(f"Missing images: {indexfile_path} {missing}")
 
 
 @celery.task(
@@ -185,6 +190,9 @@ def background_image_stitch_titration_384(indexfile_path):
     stitcher = stitch_images.ImageStitcher(indexfile_path)
     stitcher.stitch_plate()
     stitcher.save_plates()
+    missing = stitcher.collect_missing_images()
+    if missing:
+        slack.send_warning(f"Missing images: {indexfile_path} {missing}")
 
 
 @celery.task(

@@ -1,6 +1,8 @@
 import os
 from collections import defaultdict
 import itertools
+import urllib.error
+from typing import List
 
 import numpy as np
 import pandas as pd
@@ -60,6 +62,8 @@ class ImageStitcher:
         self.plate_images = None
         self.dilution_images = None
         self.max_intensity_channel = {1: max_dapi, 2: max_alexa488}
+        # these are present in the indexfile, can't be loaded
+        self.missing_images = []
 
     def fix_missing_wells(self, indexfile: pd.DataFrame) -> pd.DataFrame:
         """
@@ -106,7 +110,11 @@ class ImageStitcher:
         for channel, group in self.indexfile.groupby("Channel ID"):
             for _, row in group.iterrows():
                 url = row["URL"]
-                img = skimage.io.imread(url, as_gray=True)
+                try:
+                    img = skimage.io.imread(url, as_gray=True)
+                except urllib.error.HTTPError:
+                    self.missing_images.append(row)
+                    img = skimage.io.imread(MISSING_WELL_IMG, as_gray=True)
                 img = skimage.transform.resize(
                     img, well_size, anti_aliasing=True, preserve_range=True
                 )
@@ -146,7 +154,11 @@ class ImageStitcher:
                         group_row["Row"], group_row["Column"]
                     )
                     url = group_row["URL"]
-                    img = skimage.io.imread(url, as_gray=True)
+                    try:
+                        img = skimage.io.imread(url, as_gray=True)
+                    except urllib.error.HTTPError:
+                        self.missing_images.append(group_row)
+                        img = skimage.io.imread(MISSING_WELL_IMG, as_gray=True)
                     sample_dict[channel_name].update({dilution: img})
         for channel in CHANNELS:
             for dilution in DILUTIONS:
@@ -215,3 +227,10 @@ class ImageStitcher:
         """get plate barcode from indexfile path"""
         prev_dir = self.indexfile_path.split(os.sep)[-2]
         return prev_dir.split("__")[0]
+
+    def collect_missing_images(self) -> List[str]:
+        missing = set()
+        for i in self.missing_images:
+            name = f"r{i['Row']}c{i['Column']} {i['Channel Name']}"
+            missing.add(name)
+        return sorted(list(missing))
