@@ -112,7 +112,7 @@ class ImageStitcher:
                 url = row["URL"]
                 try:
                     img = skimage.io.imread(url, as_gray=True)
-                except urllib.error.HTTPError:
+                except (urllib.error.HTTPError, OSError):
                     self.missing_images.append(row)
                     img = skimage.io.imread(MISSING_WELL_IMG, as_gray=True)
                 img = skimage.transform.resize(
@@ -156,7 +156,7 @@ class ImageStitcher:
                     url = group_row["URL"]
                     try:
                         img = skimage.io.imread(url, as_gray=True)
-                    except urllib.error.HTTPError:
+                    except (urllib.error.HTTPError, OSError):
                         self.missing_images.append(group_row)
                         img = skimage.io.imread(MISSING_WELL_IMG, as_gray=True)
                     sample_dict[channel_name].update({dilution: img})
