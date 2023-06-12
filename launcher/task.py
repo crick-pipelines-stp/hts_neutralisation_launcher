@@ -159,6 +159,7 @@ def background_analysis_384(plate_list):
         URLError,
         HTTPError,
         BlockingIOError,
+        sqlalchemy.exc.OperationalError,
     ),
 )
 def background_image_stitch_384(indexfile_path):
@@ -182,6 +183,7 @@ def background_image_stitch_384(indexfile_path):
         URLError,
         HTTPError,
         BlockingIOError,
+        sqlalchemy.exc.OperationalError,
     ),
 )
 def background_image_stitch_titration_384(indexfile_path):
