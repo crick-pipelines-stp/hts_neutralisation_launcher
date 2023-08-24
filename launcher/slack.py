@@ -1,10 +1,10 @@
+import logging
 import os
 import textwrap
+
 import requests
-import logging
 
-from config import parse_config
-
+from .config import parse_config
 
 log = logging.getLogger(__name__)
 cfg = parse_config()

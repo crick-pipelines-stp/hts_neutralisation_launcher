@@ -8,15 +8,14 @@ import plaque_assay
 import slack
 import sqlalchemy.exc
 import stitch_images
-from config import parse_config
 
-cfg_celery = parse_config()["celery"]
+REDIS_PORT = 6379
 
-
+HOST = "neutralisation.camp.thecrick.org"
 celery = celery.Celery(
     "task",
-    backend=cfg_celery["backend"],
-    broker=cfg_celery["broker"],
+    backend=f"redis://{HOST}:{REDIS_PORT}/0",
+    broker=f"redis://{HOST}:{REDIS_PORT}/0",
 )
 
 
@@ -145,7 +144,7 @@ class BaseTask(celery.Task):
 def background_analysis_384(plate_list):
     """check for new experiment directory"""
     time.sleep(10)
-    plaque_assay.main.run(plate_list)
+    plaque_assay.run(plate_list)
 
 
 @celery.task(
@@ -157,17 +156,15 @@ def background_analysis_384(plate_list):
         URLError,
         HTTPError,
         BlockingIOError,
-        sqlalchemy.exc.OperationalError,
     ),
 )
 def background_image_stitch_384(indexfile_path):
     """image stitching for 384 well plate"""
     time.sleep(10)
     stitcher = stitch_images.ImageStitcher(indexfile_path)
-    stitcher.stitch_and_save_all_samples_and_plates()
-    missing = stitcher.collect_missing_images()
-    if missing:
-        slack.send_warning(f"Missing images: {indexfile_path} {missing}")
+    stitcher.stitch_plate()
+    stitcher.stitch_all_samples()
+    stitcher.save_all()
 
 
 @celery.task(
@@ -179,7 +176,6 @@ def background_image_stitch_384(indexfile_path):
         URLError,
         HTTPError,
         BlockingIOError,
-        sqlalchemy.exc.OperationalError,
     ),
 )
 def background_image_stitch_titration_384(indexfile_path):
@@ -188,9 +184,6 @@ def background_image_stitch_titration_384(indexfile_path):
     stitcher = stitch_images.ImageStitcher(indexfile_path)
     stitcher.stitch_plate()
     stitcher.save_plates()
-    missing = stitcher.collect_missing_images()
-    if missing:
-        slack.send_warning(f"Missing images: {indexfile_path} {missing}")
 
 
 @celery.task(
@@ -206,4 +199,4 @@ def background_image_stitch_titration_384(indexfile_path):
 def background_titration_analysis_384(plate_list):
     """titration analysis"""
     time.sleep(10)
-    plaque_assay.titration_main.run(plate_list)
+    plaque_assay.titration.run(plate_list)

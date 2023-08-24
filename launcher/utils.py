@@ -1,9 +1,8 @@
-import os
 import logging
+import os
 from typing import Optional, Tuple
 
-import slack
-
+from . import slack
 
 log = logging.getLogger(__name__)
 
