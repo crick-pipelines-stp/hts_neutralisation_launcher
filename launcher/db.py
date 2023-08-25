@@ -1,13 +1,20 @@
 import datetime
 import os
+from enum import Enum, auto
 from typing import List
 
+import models
+import slack
 import sqlalchemy
 import sqlalchemy.exc
 from sqlalchemy import or_
 
-import models
-import slack
+
+class AnalysisState(Enum):
+    NEW = auto()
+    FINISHED = auto()
+    RECENT = auto()
+    STALE = auto()
 
 
 def create_engine(test=False):
@@ -44,7 +51,7 @@ class Database:
     def now() -> str:
         return datetime.datetime.utcnow().replace(microsecond=0).isoformat(" ")
 
-    def get_variant_from_plate_name(self, plate_name: str, titration=False) -> str:
+    def get_variant_from_plate_name(self, plate_name: str, is_titration=False) -> str:
         """
         plate_name is os.path.basename(full_path).split("__")[0]
 
@@ -52,7 +59,7 @@ class Database:
         table based on the plate prefix
         """
         plate_prefix = plate_name[:3]
-        if titration:
+        if is_titration:
             plate_prefix = plate_prefix.replace("T", "S")
         result = (
             self.session.query(models.Variant)
@@ -82,14 +89,14 @@ class Database:
         return sorted([int(result.plate_id_1[1:]), int(result.plate_id_2[1:])])
 
     def get_analysis_state(
-        self, workflow_id: str, variant: str, titration: bool = False
-    ) -> str:
+        self, workflow_id: str, variant: str, is_titration: bool = False
+    ) -> AnalysisState:
         """
         Get the current state of an analysis from the `processed` table.
 
         1.  This first checks for any row in the `processed` table for the
             given `experiment` and `variant`, if there is no row then the
-            experiment has not been processed, and returns "does not exist".
+            experiment has not been processed, and returns "new".
         2.  If there is a row for the current experiment, we then check for
             the presence of a `finished_at` timestamp in the `processed` table,
             if this is present then then experiment has already been analysed,
@@ -110,10 +117,9 @@ class Database:
                 whether or not this is a titration workflow
         Returns:
         --------
-            string, one of:
-            ("does not exist", "finished", "recent", "stale")
+            AnalysisState enum
         """
-        if titration:
+        if is_titration:
             result = (
                 self.session.query(models.Titration)
                 .filter(
@@ -133,12 +139,12 @@ class Database:
             )
         if result is None:
             # no row for the given workflow_id and variant
-            return "does not exist"
+            return AnalysisState.NEW
         else:
             # 2. now check for `finished_at` time
             if result.finished_at is not None:
                 # we have a finished_at time, it's definitely been processed
-                return "finished"
+                return AnalysisState.FINISHED
             else:
                 # `finished_at` is null, look how recent `created_at` timestamp is
                 # 3. check how recent `created_at` timestamp is
@@ -148,13 +154,14 @@ class Database:
                 is_recent = int(time_difference) < self.task_timeout_sec
                 if is_recent:
                     # probably sat in the job-queue, don't re-submit analysis
-                    return "recent"
+                    # TODO: check celery job queue for this entry
+                    return AnalysisState.RECENT
                 else:
                     # 3b. try re-submitting the analysis
                     # (will have to update the created_at time)
-                    return "stale"
+                    return AnalysisState.STALE
 
-    def get_stitching_state(self, plate_name: str) -> str:
+    def get_stitching_state(self, plate_name: str) -> AnalysisState:
         """docstring"""
         result = (
             self.session.query(models.Stitching)
@@ -162,15 +169,15 @@ class Database:
             .first()
         )
         if result is None:
-            return "does not exist"
+            return AnalysisState.NEW
         if result.finished_at is not None:
-            return "finished"
+            return AnalysisState.FINISHED
         else:
             # see if it's been recently submitted
             time_now = datetime.datetime.utcnow()
             time_difference = (time_now - result.created_at).total_seconds()
             is_recent = int(time_difference) < self.task_timeout_sec
-            return "recent" if is_recent else "stale"
+            return AnalysisState.RECENT if is_recent else AnalysisState.STALE
 
     def is_plate_stitched(self, plate_name: str) -> bool:
         """

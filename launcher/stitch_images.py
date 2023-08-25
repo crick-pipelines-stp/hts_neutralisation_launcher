@@ -2,8 +2,7 @@ import itertools
 import os
 import urllib.error
 from collections import defaultdict
-from string import ascii_uppercase
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -14,7 +13,6 @@ import skimage.transform
 from . import utils
 from .config import parse_config, to_int_tup
 from .well_dict import well_dict as WELL_DICT
-from .well_dict import well_dict_r as WELL_DICT_R
 
 cfg = parse_config()
 cfg_stitch = cfg["image_stitching"]
@@ -29,6 +27,8 @@ IMG_SIZE_SAMPLE = to_int_tup(cfg_stitch["img_size_sample"])
 IMG_SIZE_PLATE_WELL = to_int_tup(cfg_stitch["img_size_plate_well"])
 CHANNELS = to_int_tup(cfg_stitch["channels"])
 DILUTIONS = to_int_tup(cfg_stitch["dilutions"])
+PLATE_DIMS = (16, 24)
+SAMPLE_DIMS = (2, 4)
 
 
 class ImageStitcher:
@@ -41,7 +41,7 @@ class ImageStitcher:
     - Sometimes certain wells fail to image, these are then missing as rows
       in the indexfile. These are replaced by a placeholder image to show as
       missing and keep plates & samples consistent dimensions.
-    - Images are saved to a directory on CAMP.
+    - Images are saved to a directory on Nemo.
     - Image paths are not recorded as they are consistent and can be
       constructed from the metadata such as plate barcode and well position.
     - Raw images are unsigned 16-bit tiffs, stitched images are saved as
@@ -51,20 +51,26 @@ class ImageStitcher:
 
     def __init__(
         self,
-        indexfile_path,
-        output_dir=OUTPUT_DIR,
-        max_dapi=MAX_INTENSITY_DAPI,
-        max_alexa488=MAX_INTENSITY_ALEXA488,
-        missing_well_img_path=MISSING_WELL_IMG,
+        indexfile_path: str,
+        output_dir: str = OUTPUT_DIR,
+        harmony_name_map: Dict = HARMONY_NAME_IP_MAP,
+        max_dapi: int = MAX_INTENSITY_DAPI,
+        max_alexa488: int = MAX_INTENSITY_ALEXA488,
+        missing_well_img_path: str = MISSING_WELL_IMG,
+        img_size_sample: Tuple[int] = IMG_SIZE_SAMPLE,
+        img_size_plate_well: Tuple[int] = IMG_SIZE_PLATE_WELL,
     ):
         self.indexfile_path = indexfile_path
         self.missing_well_img_path = missing_well_img_path
+        self.harmony_name_map = harmony_name_map
         indexfile = pd.read_csv(indexfile_path, sep="\t")
         self.indexfile = self.fix_indexfile(indexfile)
         self.output_dir = output_dir
         self.plate_images = None
         self.dilution_images = None
         self.max_intensity_channel = {1: max_dapi, 2: max_alexa488}
+        self.img_size_sample = img_size_sample
+        self.img_size_plate_well = img_size_plate_well
         # these are present in the indexfile, can't be loaded
         self.missing_images = []
 
@@ -91,10 +97,9 @@ class ImageStitcher:
         merged = merged.sort_values(["Row", "Column", "Channel ID"])
         return merged
 
-    @staticmethod
-    def fix_urls(df: pd.DataFrame) -> pd.DataFrame:
+    def fix_urls(self, df: pd.DataFrame) -> pd.DataFrame:
         # not a regex, but needed for pandas substring replacement
-        df.URL = df.URL.replace(HARMONY_NAME_IP_MAP, regex=True)
+        df.URL = df.URL.replace(self.harmony_name_map, regex=True)
         return df
 
     def fix_indexfile(self, indexfile: pd.DataFrame) -> pd.DataFrame:
@@ -106,24 +111,22 @@ class ImageStitcher:
         indexfile = self.fix_missing_wells(indexfile)
         return indexfile
 
-    def stitch_plate(self, well_size=IMG_SIZE_PLATE_WELL):
+    def stitch_plate(self) -> None:
         """stitch well images into a plate montage"""
         ch_images = defaultdict(list)
         plate_images = dict()
         for channel, group in self.indexfile.groupby("Channel ID"):
             for _, row in group.iterrows():
-                url = row["URL"]
-                try:
-                    img = skimage.io.imread(url, as_gray=True)
-                except (urllib.error.HTTPError, OSError):
-                    self.missing_images.append(row)
-                    img = skimage.io.imread(self.missing_well_img_path, as_gray=True)
+                img = self.load_img(row)
                 img = skimage.transform.resize(
-                    img, well_size, anti_aliasing=True, preserve_range=True
+                    img,
+                    self.img_size_plate_well,
+                    anti_aliasing=True,
+                    preserve_range=True,
                 )
                 ch_images[channel].append(img)
             img_stack = np.stack(ch_images[channel])
-            img_plate = img_stack.reshape(384, *well_size)
+            img_plate = img_stack.reshape(384, *self.img_size_plate_well)
             # rescale intensity
             img_plate /= self.max_intensity_channel[channel]
             img_plate[img_plate > 1.0] = 1.0
@@ -132,13 +135,13 @@ class ImageStitcher:
                 img_plate,
                 fill=1.0,
                 padding_width=3,
-                grid_shape=(16, 24),
+                grid_shape=PLATE_DIMS,
                 rescale_intensity=False,
             )
             plate_images[channel] = img_montage
         self.plate_images = plate_images
 
-    def stitch_sample(self, well: str, img_size=IMG_SIZE_SAMPLE) -> np.ndarray:
+    def stitch_sample(self, well: str) -> np.ndarray:
         """stitch individual sample"""
         df = self.indexfile.copy()
         sample_dict = defaultdict(dict)
@@ -156,47 +159,46 @@ class ImageStitcher:
                     dilution = utils.get_dilution_from_row_col(
                         group_row["Row"], group_row["Column"]
                     )
-                    url = group_row["URL"]
-                    try:
-                        img = skimage.io.imread(url, as_gray=True)
-                    except (urllib.error.HTTPError, OSError):
-                        self.missing_images.append(group_row)
-                        img = skimage.io.imread(
-                            self.missing_well_img_path, as_gray=True
-                        )
+                    img = self.load_img(group_row)
                     sample_dict[channel_name].update({dilution: img})
         for channel in CHANNELS:
             for dilution in DILUTIONS:
                 img = sample_dict[channel][dilution]
                 img = skimage.transform.resize(
-                    img, img_size, anti_aliasing=True, preserve_range=True
+                    img, self.img_size_sample, anti_aliasing=True, preserve_range=True
                 )
                 # rescale image intensities
                 img /= self.max_intensity_channel[channel]
                 img[img > 1.0] = 1
                 img = skimage.img_as_float(img)
                 images.append(img)
-        img_stack = np.stack(images).reshape(8, *img_size)
+        img_stack = np.stack(images).reshape(8, *self.img_size_sample)
         img_montage = skimage.util.montage(
             arr_in=img_stack,
             fill=1.0,  # white if rescale_intensity is True
-            grid_shape=(2, 4),
+            grid_shape=SAMPLE_DIMS,
             rescale_intensity=False,
             padding_width=10,
-            multichannel=False,
         )
         return img_montage
 
-    def stitch_all_samples(self, img_size=IMG_SIZE_SAMPLE):
+    def stitch_all_samples(self):
         """stitch but don't save sample images"""
         dilution_images = {}
         for well in WELL_DICT.keys():
-            sample_img = self.stitch_sample(well, img_size)
+            sample_img = self.stitch_sample(well)
             dilution_images[well] = sample_img
         self.dilution_images = dilution_images
 
-    def create_img_store(self) -> Dict:
+    def create_img_store(self) -> None:
         """
+        This loads all images from an indexfile, and stores the resized
+        and intensity-scaled images in a dictionary. The images are stored
+        twice for the plate images and the sample images, as they require
+        different sizes for each.
+        The image store is stored in the class as `self.img_store`.
+        ---
+        img_store:
         {
             "sample": {
                 "A01": {
@@ -216,20 +218,20 @@ class ImageStitcher:
         plate_dict = defaultdict(list)
         for _, row in self.indexfile.iterrows():
             img = self.load_img(row)
-            well_384 = row_col_to_well(int(row["Row"]), int(row["Column"]))
-            dilution = dilution_from_well(well_384)
-            well_96 = convert_well_384_to_96(well_384)
+            well_384 = utils.row_col_to_well(int(row["Row"]), int(row["Column"]))
+            dilution = utils.dilution_from_well(well_384)
+            well_96 = utils.convert_well_384_to_96(well_384)
             channel = int(row["Channel ID"])
             img = self.rescale_intensity(img, channel)
             img_resized_plate_well = skimage.transform.resize(
-                img, IMG_SIZE_PLATE_WELL, anti_aliasing=True, preserve_range=True
+                img, self.img_size_plate_well, anti_aliasing=True, preserve_range=True
             )
             img_resized_sample = skimage.transform.resize(
-                img, IMG_SIZE_SAMPLE, anti_aliasing=True, preserve_range=True
+                img, self.img_size_sample, anti_aliasing=True, preserve_range=True
             )
             sample_dict[well_96][channel][dilution] = img_resized_sample
             plate_dict[channel].append(img_resized_plate_well)
-        return {"sample": sample_dict, "plate": plate_dict}
+        self.img_store = {"sample": sample_dict, "plate": plate_dict}
 
     def load_img(self, row: pd.Series):
         """
@@ -252,25 +254,25 @@ class ImageStitcher:
         img = skimage.img_as_float(img)
         return img
 
-    def stitch_and_save_plates(self, img_store):
+    def stitch_and_save_plates(self):
         # stitch and save plates images
         for channel_num in CHANNELS:
-            img_stack_plate = np.stack(img_store["plate"][channel_num])
+            img_stack_plate = np.stack(self.img_store["plate"][channel_num])
             img_montage_plate = skimage.util.montage(
                 img_stack_plate,
                 fill=1.0,
                 padding_width=3,
-                grid_shape=(16, 24),
+                grid_shape=PLATE_DIMS,
                 rescale_intensity=False,
             )
             plate_path = os.path.join(self.output_dir_path, f"plate_{channel_num}.png")
             plate_arr = skimage.img_as_ubyte(img_montage_plate)
             skimage.io.imsave(fname=plate_path, arr=plate_arr)
 
-    def stitch_and_save_samples(self, img_store):
+    def stitch_and_save_samples(self):
         # stitch and save sample images
         for well in WELL_DICT.keys():
-            sample_well = img_store["sample"][well]
+            sample_well = self.img_store["sample"][well]
             sample_imgs = []
             for channel in CHANNELS:
                 for dilution in [1, 2, 3, 4]:
@@ -280,16 +282,13 @@ class ImageStitcher:
             sample_montage = skimage.util.montage(
                 arr_in=sample_stack,
                 fill=1.0,  # white if rescale_intensity is True
-                grid_shape=(2, 4),
+                grid_shape=SAMPLE_DIMS,
                 rescale_intensity=False,
                 padding_width=10,
-                multichannel=False,
             )
+            sample_montage = skimage.img_as_ubyte(sample_montage)
             well_path = os.path.join(self.output_dir_path, f"well_{well}.png")
-            skimage.io.imsave(
-                fname=well_path,
-                arr=skimage.img_as_ubyte(sample_montage),
-            )
+            skimage.io.imsave(fname=well_path, arr=sample_montage)
 
     def stitch_and_save_all_samples_and_plates(self):
         """
@@ -301,9 +300,9 @@ class ImageStitcher:
         `self.plate_images` to reduce memory usage.
         """
         self.create_output_dir()
-        img_store = self.create_img_store()
-        self.stitch_and_save_plates(img_store)
-        self.stitch_and_save_samples(img_store)
+        self.create_img_store()
+        self.stitch_and_save_plates()
+        self.stitch_and_save_samples()
 
     def save_plates(self):
         """save stitched plates"""
@@ -349,28 +348,3 @@ class ImageStitcher:
             name = f"r{i['Row']}c{i['Column']} {i['Channel Name']}"
             missing.add(name)
         return sorted(list(missing))
-
-
-def row_col_to_well(row: int, col: int) -> str:
-    """return well label from row and column integers"""
-    return f"{ascii_uppercase[row-1]}{col:02}"
-
-
-def convert_well_384_to_96(well_384: str) -> str:
-    """convert 384 well label to a 96 well label"""
-    return WELL_DICT_R[well_384]
-
-
-def dilution_from_well(well: str) -> int:
-    """convert well label to dilution integer (1, 2 ,3, 4)"""
-    row = ord(well[0]) - 64
-    col = int(well[1:])
-    if row % 2 == 0 and col % 2 == 0:
-        return 4
-    if row % 2 == 1 and col % 2 == 0:
-        return 3
-    if row % 2 == 0 and col % 2 == 1:
-        return 2
-    if row % 2 == 1 and col % 2 == 1:
-        return 1
-    raise ValueError("shouldn't reach here")

@@ -2,19 +2,19 @@
 module docstring
 """
 
-import os
 import logging
+import os
 import sys
 import textwrap
 from typing import List
 
 import db
-from snapshot import Snapshot
-import utils
 import slack
 import task
+import utils
 from config import parse_config
-
+from db import AnalysisState
+from snapshot import Snapshot
 
 log = logging.getLogger(__name__)
 cfg_analysis = parse_config()["analysis"]
@@ -30,12 +30,14 @@ class Dispatcher:
     stitching jobs to celery task queue.
     """
 
-    def __init__(self, results_dir=RESULTS_DIR, db_path=SNAPSHOT_DB, titration=False):
+    def __init__(
+        self, results_dir=RESULTS_DIR, db_path=SNAPSHOT_DB, is_titration=False
+    ):
         self.results_dir = results_dir
         self.db_path = db_path
         engine = db.create_engine()
         session = db.create_session(engine)
-        self.prefix_char = "T" if titration else "S"
+        self.prefix_char = "T" if is_titration else "S"
         self.regex_filter = rf"^{self.prefix_char}.*/*Measurement [0-9]$"
         self.database = db.Database(session)
 
@@ -107,7 +109,7 @@ class Dispatcher:
         is_titration = utils.is_titration_plate(plate_name)
         try:
             variant = self.database.get_variant_from_plate_name(
-                plate_name, titration=is_titration
+                plate_name, is_titration=is_titration
             )
         except ValueError as err:
             log.error(err)
@@ -117,11 +119,11 @@ class Dispatcher:
         log.info(f"plate_list = {plate_list}")
         if len(plate_list) == 2:
             self.handle_analysis(
-                plate_list, workflow_id, variant, titration=is_titration
+                plate_list, workflow_id, variant, is_titration=is_titration
             )
 
     def handle_analysis(
-        self, plate_list: List[str], workflow_id: str, variant: str, titration=False
+        self, plate_list: List[str], workflow_id: str, variant: str, is_titration=False
     ):
         """
         Determine if valid and new exported data, and if so launches
@@ -139,36 +141,33 @@ class Dispatcher:
         None
         """
         analysis_state = self.database.get_analysis_state(
-            workflow_id, variant, titration=titration
+            workflow_id, variant, is_titration=is_titration
         )
-        if analysis_state == "finished":
+        if analysis_state == AnalysisState.FINISHED:
             log.info(
                 f"workflow_id: {workflow_id} variant: {variant} has already been analysed"
             )
-        elif analysis_state == "recent":
+        elif analysis_state == AnalysisState.RECENT:
             log.info(
                 f"workflow_id: {workflow_id} variant: {variant} has recently been added to the job queue, skipping..."
             )
-        elif analysis_state == "stale":
+        elif analysis_state == AnalysisState.STALE:
             # reset create_at timestamp and resubmit to job queue
             log.info(
                 f"workflow_id: {workflow_id} variant: {variant} is stale, resubmitting to job queue..."
             )
-            if titration:
+            if is_titration:
                 self.database.update_titration_entry(workflow_id, variant)
-            else:
-                self.database.update_analysis_entry(workflow_id, variant)
-            log.info(f"both plates for {workflow_id}: {variant} found")
-            if titration:
                 task.background_titration_analysis_384(plate_list)
                 log.info("titration analysis launched")
             else:
+                self.database.update_analysis_entry(workflow_id, variant)
                 task.background_analysis_384.delay(plate_list)
                 log.info("analysis launched")
-        elif analysis_state == "does not exist":
+        elif analysis_state == AnalysisState.NEW:
             log.info(f"new workflow_id: {workflow_id} variant: {variant}")
             log.info(f"both plates for {workflow_id}: {variant} found")
-            if titration:
+            if is_titration:
                 self.database.create_titration_entry(workflow_id, variant)
                 task.background_titration_analysis_384.delay(plate_list)
                 log.info("titration analysis launched")
@@ -192,25 +191,26 @@ class Dispatcher:
         if not utils.is_384_well_plate(plate_path, workflow_id):
             log.warning("not a 384 plate, skipping stitching")
             return None
-        log.info(f"determined {plate_name} is a 384 plate")
         stitching_state = self.database.get_stitching_state(plate_name)
-        if stitching_state == "finished":
+        if stitching_state == AnalysisState.FINISHED:
             # already stitched, ignore
-            log.info(f"plate: {plate_name} has already been stitched")
-        elif stitching_state == "recent":
+            log.info(f"plate: {plate_name} has already been stitched, skipping...")
+        elif stitching_state == AnalysisState.RECENT:
             # recent, ignore
             log.info(f"plate: {plate_name} has recently been submitted, skipping...")
         elif stitching_state == "stale":
-            # reset create_at timestamp and resubmit to job queue
-            log.info(f"plate: {plate_name} is stale, resubmitting to job queue...")
+            # reset created_at timestamp and resubmit to job queue
+            log.info(f"plate: {plate_name} is stale")
             self.database.update_stitching_entry(plate_name)
             indexfile_path = os.path.join(plate_path, "indexfile.txt")
             if is_titration:
                 task.background_image_stitch_titration_384.delay(indexfile_path)
             else:
                 task.background_image_stitch_384.delay(indexfile_path)
-            log.info(f"stitching launched for plate: {plate_name}")
-        elif stitching_state == "does not exist":
+            log.info(
+                f"stitching launched for plate: {plate_name} has been resubmitted to the job queue"
+            )
+        elif stitching_state == AnalysisState.NEW:
             # create new entry and submit to job queue
             self.database.create_stitching_entry(plate_name)
             indexfile_path = os.path.join(plate_path, "indexfile.txt")
