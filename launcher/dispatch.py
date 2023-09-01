@@ -117,7 +117,7 @@ class Dispatcher:
             variant = self.database.get_variant_from_plate_name(
                 plate_name, is_titration=is_titration
             )
-        except VariantError as err:
+        except VariantLookupError as err:
             log.error(err)
             return
         self.handle_stitching(plate_path, workflow_id, plate_name, is_titration)
