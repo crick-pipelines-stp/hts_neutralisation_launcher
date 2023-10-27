@@ -72,9 +72,23 @@ class Database:
             .first()
         )
         if result is None:
-            raise VariantLookupError(
-                f"cannot find variant from plate name {plate_name}"
+            # try without any prefix, variants might be listed in the database
+            # by their digits alone without any sample type prefix.
+            plate_prefix = plate_prefix[1:]
+            result = (
+                self.session.query(models.Variant)
+                .filter(
+                    or_(
+                        models.Variant.plate_id_1 == plate_prefix,
+                        models.Variant.plate_id_2 == plate_prefix,
+                    )
+                )
+                .first()
             )
+            if result is None:
+                raise VariantLookupError(
+                    f"cannot find variant from plate name {plate_name}"
+                )
         return result.mutant_strain
 
     def get_variant_ints_from_name(self, variant_name: str) -> List[int]:

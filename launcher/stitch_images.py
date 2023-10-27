@@ -333,6 +333,11 @@ class ImageStitcher:
     def create_output_dir(self):
         """create output directory if it doesn't already exist"""
         plate_barcode = self.get_plate_barcode()
+        if not plate_barcode.startswith(("T", "S")):
+            # standardise the sample type on "S" for non-titration plates
+            # this ensures the dash_app can find the plates without querying
+            # for sample type
+            plate_barcode = "S" + plate_barcode[1:]
         output_dir_path = os.path.join(self.output_dir, plate_barcode)
         os.makedirs(output_dir_path, exist_ok=True)
         self.output_dir_path = output_dir_path

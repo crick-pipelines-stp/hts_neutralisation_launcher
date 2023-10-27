@@ -34,14 +34,12 @@ class Dispatcher:
         self,
         results_dir: str = RESULTS_DIR,
         db_path: str = SNAPSHOT_DB,
-        is_titration: bool = False,
     ):
         self.results_dir = results_dir
         self.db_path = db_path
         engine = db.create_engine()
         session = db.create_session(engine)
-        self.prefix_char = "T" if is_titration else "S"
-        self.regex_filter = rf"^{self.prefix_char}.*/*Measurement [0-9]$"
+        self.regex_filter = rf"[A-Z][0-9]{8}/.*Measurement [0-9]$"
         self.database = db.Database(session)
 
     def get_new_directories(self) -> List[str]:
@@ -98,11 +96,7 @@ class Dispatcher:
         """
         final_path = os.path.basename(path)
         plate_name = utils.get_plate_name(final_path)
-        return (
-            plate_name[-6:] == workflow_id
-            and final_path[0] == self.prefix_char
-            and int(final_path[1:3]) in variants
-        )
+        return plate_name[-6:] == workflow_id and int(final_path[1:3]) in variants
 
     def dispatch_plate(self, plate_path: str) -> None:
         """
