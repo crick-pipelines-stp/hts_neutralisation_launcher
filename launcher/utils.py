@@ -1,8 +1,10 @@
 import logging
 import os
+from string import ascii_uppercase
 from typing import Optional, Tuple
 
 from . import slack
+from .well_dict import well_dict_r
 
 log = logging.getLogger(__name__)
 
@@ -92,3 +94,28 @@ def get_workflow_id(src_path: str) -> str:
     plate_name = get_plate_name(src_path)
     workflow_id = plate_name[-6:]
     return workflow_id
+
+
+def row_col_to_well(row: int, col: int) -> str:
+    """return well label from row and column integers"""
+    return f"{ascii_uppercase[row-1]}{col:02}"
+
+
+def convert_well_384_to_96(well_384: str) -> str:
+    """convert 384 well label to a 96 well label"""
+    return well_dict_r[well_384]
+
+
+def dilution_from_well(well: str) -> int:
+    """convert well label to dilution integer (1, 2 ,3, 4)"""
+    row = ord(well[0]) - 64
+    col = int(well[1:])
+    if row % 2 == 0 and col % 2 == 0:
+        return 4
+    if row % 2 == 1 and col % 2 == 0:
+        return 3
+    if row % 2 == 0 and col % 2 == 1:
+        return 2
+    if row % 2 == 1 and col % 2 == 1:
+        return 1
+    raise ValueError("shouldn't reach here")

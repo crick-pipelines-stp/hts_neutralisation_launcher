@@ -11,6 +11,8 @@ cfg = parse_config()
 HOST_IP = cfg["default"]["host_ip"]
 PORT = cfg["celery"]["flower_port"]
 
+RED = "#ad1720"
+YELLOW = "#ffce00"
 
 SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_NEUTRALISATION")
 if not SLACK_WEBHOOK_URL:
@@ -20,7 +22,7 @@ if not SLACK_WEBHOOK_URL:
     )
 
 
-def send_alert(exc, task_id, args, kwargs, einfo):
+def send_alert(exc, task_id, args, kwargs, einfo) -> None:
     """send slack message on failure"""
     data = {
         "text": "Something broke",
@@ -43,7 +45,7 @@ def send_alert(exc, task_id, args, kwargs, einfo):
                     -------------------------------------
                 """
                 ),
-                "color": "#ad1720",
+                "color": RED,
                 "attachment_type": "default",
             }
         ],
@@ -52,7 +54,7 @@ def send_alert(exc, task_id, args, kwargs, einfo):
     log_response(response)
 
 
-def send_warning(message):
+def send_warning(message: str) -> None:
     """send slack warning message"""
     data = {
         "text": "Something might be wrong",
@@ -67,7 +69,7 @@ def send_warning(message):
                     {message}
                 """
                 ),
-                "color": "#ffce00",
+                "color": YELLOW,
                 "attachment_type": "default",
             }
         ],
@@ -76,7 +78,7 @@ def send_warning(message):
     log_response(response)
 
 
-def send_simple_alert(workflow_id, variant, message):
+def send_simple_alert(workflow_id: str | int, variant: str, message: str) -> None:
     """send slack message on failure"""
     data = {
         "text": "Something broke",
@@ -98,7 +100,7 @@ def send_simple_alert(workflow_id, variant, message):
                     -------------------------------------
                 """
                 ),
-                "color": "#ad1720",
+                "color": RED,
                 "attachment_type": "default",
             }
         ],
@@ -107,7 +109,7 @@ def send_simple_alert(workflow_id, variant, message):
     log_response(response)
 
 
-def log_response(response):
+def log_response(response: requests.Response) -> None:
     if response.status_code == 200:
         log.info("message sent to slack")
     else:
