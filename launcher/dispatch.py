@@ -39,7 +39,7 @@ class Dispatcher:
         self.db_path = db_path
         engine = db.create_engine()
         session = db.create_session(engine)
-        self.regex_filter = rf"[A-Z][0-9]{8}/.*Measurement [0-9]$"
+        self.regex_filter = r"^[A-Z][0-9]{8}_.*-Measurement [0-9]$"
         self.database = db.Database(session)
 
     def get_new_directories(self) -> List[str]:
