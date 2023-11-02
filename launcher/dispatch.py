@@ -75,7 +75,7 @@ class Dispatcher:
         `self.get_new_directories()`, but it is done this way to account
         for when replicate pairs are not exported at the same time.
         """
-        all_subdirs = [i for i in os.listdir(self.results_dir)]
+        all_subdirs = os.listdir(self.results_dir)
         full_paths = sorted([os.path.join(self.results_dir, i) for i in all_subdirs])
         variant_ints = self.database.get_variant_ints_from_name(variant)
         wanted_workflows = []
