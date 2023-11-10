@@ -61,6 +61,10 @@ class Database:
         plate_prefix = plate_name[:3]
         if is_titration:
             plate_prefix = plate_prefix.replace("T", "S")
+        else:
+            if not plate_prefix.startswith("S"):
+                # plate prefixes with "A" etc.
+                plate_prefix = "S" + plate_prefix[1:]
         result = (
             self.session.query(models.Variant)
             .filter(
