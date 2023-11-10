@@ -9,10 +9,9 @@ import pandas as pd
 import skimage
 import skimage.io
 import skimage.transform
-
-from . import utils
-from .config import parse_config, to_int_tup
-from .well_dict import well_dict as WELL_DICT
+import utils
+from config import parse_config, to_int_tup
+from well_dict import well_dict as WELL_DICT
 
 cfg = parse_config()
 cfg_stitch = cfg["image_stitching"]
