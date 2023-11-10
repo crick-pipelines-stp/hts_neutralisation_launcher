@@ -198,7 +198,7 @@ class Dispatcher:
         elif stitching_state == AnalysisState.RECENT:
             # recent, ignore
             log.info(f"plate: {plate_name} has recently been submitted, skipping...")
-        elif stitching_state == "stale":
+        elif stitching_state == AnalysisState.STALE:
             # reset created_at timestamp and resubmit to job queue
             log.info(f"plate: {plate_name} is stale")
             self.database.update_stitching_entry(plate_name)
