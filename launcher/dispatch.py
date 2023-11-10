@@ -39,7 +39,7 @@ class Dispatcher:
         self.db_path = db_path
         engine = db.create_engine()
         session = db.create_session(engine)
-        self.regex_filter = rf"[A-Z][0-9]{8}/.*Measurement [0-9]$"
+        self.regex_filter = r"^[A-Z][0-9]{8}_.*-Measurement [0-9]$"
         self.database = db.Database(session)
 
     def get_new_directories(self) -> List[str]:
@@ -75,7 +75,7 @@ class Dispatcher:
         `self.get_new_directories()`, but it is done this way to account
         for when replicate pairs are not exported at the same time.
         """
-        all_subdirs = [i for i in os.listdir(self.results_dir)]
+        all_subdirs = os.listdir(self.results_dir)
         full_paths = sorted([os.path.join(self.results_dir, i) for i in all_subdirs])
         variant_ints = self.database.get_variant_ints_from_name(variant)
         wanted_workflows = []
@@ -198,7 +198,7 @@ class Dispatcher:
         elif stitching_state == AnalysisState.RECENT:
             # recent, ignore
             log.info(f"plate: {plate_name} has recently been submitted, skipping...")
-        elif stitching_state == "stale":
+        elif stitching_state == AnalysisState.STALE:
             # reset created_at timestamp and resubmit to job queue
             log.info(f"plate: {plate_name} is stale")
             self.database.update_stitching_entry(plate_name)

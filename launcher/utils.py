@@ -3,8 +3,8 @@ import os
 from string import ascii_uppercase
 from typing import Optional, Tuple
 
-from . import slack
-from .well_dict import well_dict_r
+import slack
+from well_dict import well_dict_r
 
 log = logging.getLogger(__name__)
 
