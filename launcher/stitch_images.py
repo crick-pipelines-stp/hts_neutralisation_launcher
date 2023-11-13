@@ -285,6 +285,7 @@ class ImageStitcher:
                 rescale_intensity=False,
                 padding_width=10,
             )
+            sample_montage = np.clip(sample_montage, -1, 1)
             sample_montage = skimage.img_as_ubyte(sample_montage)
             well_path = os.path.join(self.output_dir_path, f"well_{well}.png")
             skimage.io.imsave(fname=well_path, arr=sample_montage)
@@ -310,6 +311,7 @@ class ImageStitcher:
             raise RuntimeError("no plate images, have you run stitch_plate()?")
         for channel_num, plate_arr in self.plate_images.items():
             plate_path = os.path.join(self.output_dir_path, f"plate_{channel_num}.png")
+            plate_arr = np.clip(plate_arr, -1, 1)
             plate_arr = skimage.img_as_ubyte(plate_arr)
             skimage.io.imsave(fname=plate_path, arr=plate_arr)
 
