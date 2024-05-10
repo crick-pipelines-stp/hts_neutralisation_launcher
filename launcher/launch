@@ -3,6 +3,8 @@
 # launch all necessary programs for the neutralisation analysis
 # in a tmux server and attach the tmux session
 
+redis-server --daemonize yes
+
 tmux new -s ne -d
 
 tmux rename-window -t ne celery-analysis

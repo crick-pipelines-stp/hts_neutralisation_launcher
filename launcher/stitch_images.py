@@ -265,6 +265,7 @@ class ImageStitcher:
                 rescale_intensity=False,
             )
             plate_path = os.path.join(self.output_dir_path, f"plate_{channel_num}.png")
+            img_montage_plate = np.clip(img_montage_plate, -1, 1)
             plate_arr = skimage.img_as_ubyte(img_montage_plate)
             skimage.io.imsave(fname=plate_path, arr=plate_arr)
 
@@ -285,6 +286,7 @@ class ImageStitcher:
                 rescale_intensity=False,
                 padding_width=10,
             )
+            sample_montage = np.clip(sample_montage, -1, 1)
             sample_montage = skimage.img_as_ubyte(sample_montage)
             well_path = os.path.join(self.output_dir_path, f"well_{well}.png")
             skimage.io.imsave(fname=well_path, arr=sample_montage)
@@ -310,6 +312,7 @@ class ImageStitcher:
             raise RuntimeError("no plate images, have you run stitch_plate()?")
         for channel_num, plate_arr in self.plate_images.items():
             plate_path = os.path.join(self.output_dir_path, f"plate_{channel_num}.png")
+            plate_arr = np.clip(plate_arr, -1, 1)
             plate_arr = skimage.img_as_ubyte(plate_arr)
             skimage.io.imsave(fname=plate_path, arr=plate_arr)
 
@@ -322,11 +325,11 @@ class ImageStitcher:
             raise RuntimeError("no plate images, have you run stitch_plate()?")
         for channel_num, plate_arr in self.plate_images.items():
             plate_path = os.path.join(self.output_dir_path, f"plate_{channel_num}.png")
-            plate_arr = skimage.img_as_ubyte(plate_arr)
+            plate_arr = skimage.img_as_ubyte(np.clip(plate_arr, -1, 1))
             skimage.io.imsave(fname=plate_path, arr=plate_arr)
         for well_name, well_arr in self.dilution_images.items():
             well_path = os.path.join(self.output_dir_path, f"well_{well_name}.png")
-            well_arr = skimage.img_as_ubyte(well_arr)
+            well_arr = skimage.img_as_ubyte(np.clip(well_arr, -1, 1))
             skimage.io.imsave(fname=well_path, arr=well_arr)
 
     def create_output_dir(self):
