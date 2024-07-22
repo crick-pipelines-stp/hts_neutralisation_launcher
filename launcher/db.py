@@ -49,7 +49,11 @@ class Database:
 
     @staticmethod
     def now() -> str:
-        return datetime.datetime.utcnow().replace(microsecond=0).isoformat(" ")
+        return (
+            datetime.datetime.now(datetime.timezone.utc)
+            .replace(microsecond=0)
+            .isoformat(" ")
+        )
 
     def get_variant_from_plate_name(self, plate_name: str, is_titration=False) -> str:
         """
@@ -168,7 +172,7 @@ class Database:
             else:
                 # `finished_at` is null, look how recent `created_at` timestamp is
                 # 3. check how recent `created_at` timestamp is
-                time_now = datetime.datetime.utcnow()
+                time_now = datetime.datetime.now(datetime.timezone.utc)
                 time_difference = (time_now - result.created_at).total_seconds()
                 # "recent" defined as within 30 minutes
                 is_recent = int(time_difference) < self.task_timeout_sec
@@ -194,7 +198,7 @@ class Database:
             return AnalysisState.FINISHED
         else:
             # see if it's been recently submitted
-            time_now = datetime.datetime.utcnow()
+            time_now = datetime.datetime.now(datetime.timezone.utc)
             time_difference = (time_now - result.created_at).total_seconds()
             is_recent = int(time_difference) < self.task_timeout_sec
             return AnalysisState.RECENT if is_recent else AnalysisState.STALE
