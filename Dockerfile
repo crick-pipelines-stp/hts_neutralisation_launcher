@@ -4,7 +4,12 @@ FROM condaforge/miniforge3
 USER root
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-    procps \
+    pkg-config \
+    libmysqlclient-dev \
+    gcc \
+    python3-dev \
+    default-libmysqlclient-dev \
+    build-essential \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -17,21 +22,14 @@ RUN conda config --add channels defaults \
 # Install conda packages
 RUN mamba install -y python=3.11
 RUN mamba clean --all --yes
+ENV PATH=/opt/conda/bin:$PATH
 
-# # Install pip packages
-# RUN pip install numpy
-# RUN pip install matplotlib
-# RUN pip install scipy
+# Copy and install code
+COPY . /usr/src
+WORKDIR /usr/src
+WORKDIR /usr/src/plaque_assay
+RUN pip install .
+WORKDIR /usr/src
+RUN pip install .
 
-# ENV PATH=/opt/conda/bin:$PATH
-# WORKDIR /home
-
-# CMD ["bash"]
-
-
-# celery
-# redis
-# requests
-# pandas
-# numpy
-# scikit-image
+CMD ["bash"]
